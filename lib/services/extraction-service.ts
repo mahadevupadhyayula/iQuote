@@ -43,6 +43,7 @@ const toStoredExtraction = (extraction: ExtractionOutput) => ({
   field_confidence: extraction.field_confidence,
   missing_fields: extraction.missing_fields,
   clarification_questions: extraction.clarification_questions,
+  raw_validated_response: extraction,
   extracted_at: new Date().toISOString(),
 });
 
@@ -83,7 +84,8 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
         },
       });
 
-      const targetStatus = extraction.missing_fields.length > 0 ? needsInformationStatus : configuringStatus;
+      const needsInformation = extraction.missing_fields.length > 0 || extraction.ambiguities.length > 0 || clarificationQuestions.length > 0;
+      const targetStatus = needsInformation ? needsInformationStatus : configuringStatus;
       const transitioned = updatedQuote.status === targetStatus
         ? updatedQuote
         : (await workflowService.transitionQuote({

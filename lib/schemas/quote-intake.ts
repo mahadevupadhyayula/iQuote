@@ -9,6 +9,7 @@ export const quoteIntakeSchema = z.object({
   validUntil: z.string().trim().optional(),
   requestText: z.string().trim().min(20, "Paste at least 20 characters from the customer request."),
   attachmentName: z.string().trim().optional(),
+  seededScenarioId: z.enum(["A", "B", "C"]).optional(),
 });
 
 export type QuoteIntakeInput = z.infer<typeof quoteIntakeSchema>;

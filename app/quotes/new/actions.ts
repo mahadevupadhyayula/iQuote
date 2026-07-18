@@ -3,60 +3,68 @@
 import { createQuoteExtractionAdapter } from "@/lib/adapters/ai/quote-extraction-adapter";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
-import { createExtractionService } from "@/lib/services/extraction-service";
-import { createProductMatchingService } from "@/lib/services/product-matching-service";
 import { quoteIntakeSchema, type QuoteIntakeInput } from "@/lib/schemas/quote-intake";
-import type { QuoteItemCreateInput } from "@/lib/repositories/quotes";
-import type { ExtractionOutput } from "@/lib/schemas/extraction-schema";
+import { createExtractionService } from "@/lib/services/extraction-service";
+import { createWorkflowService } from "@/lib/services/workflow-service";
+
+type PreviewLine = { sku: string | null; description: string | null; quantity: number | null };
+type ClarificationQuestion = { field: string; question: string };
+type ExtractionSummary = {
+  requestedItemCount: number;
+  overallConfidence: number | null;
+  ambiguityCount: number;
+  missingFieldCount: number;
+};
 
 export type IntakeActionState =
-  | { ok: true; quoteId: string; quoteNumber: string; status: string; extractionStatus: "completed" | "manual_fallback"; missingFields: string[]; suggestions: string[]; previewLines: { sku: string | null; description: string | null; quantity: number | null }[] }
+  | {
+      ok: true;
+      quoteId: string;
+      quoteNumber: string;
+      status: string;
+      slaStartedAt: string;
+      slaDueAt: string;
+      extractionStatus: "completed" | "manual_fallback";
+      extractionSummary: ExtractionSummary;
+      missingFields: string[];
+      clarificationQuestions: ClarificationQuestion[];
+      manualFallback: boolean;
+      suggestions: string[];
+      previewLines: PreviewLine[];
+    }
   | { ok: false; error: string; manualFallback: true; suggestions: string[] };
 
-const money = (amount: number) => Math.round(amount * 100) / 100;
-const lineTotals = (items: Omit<QuoteItemCreateInput, "quote_id">[]) => {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
-  const discount = items.reduce((sum, item) => sum + item.discount_amount, 0);
-  return { subtotal: money(subtotal), discount: money(discount), total: money(subtotal - discount) };
-};
 const quoteNumber = () => `Q-${Date.now()}`;
+const intakeSlaMinutes = 15;
 
-const toSuggestions = (missingFields: string[]) =>
-  missingFields.length > 0
+const toSuggestions = (missingFields: string[], clarificationQuestions: ClarificationQuestion[]) => {
+  if (clarificationQuestions.length > 0) return clarificationQuestions.map((question) => question.question);
+  return missingFields.length > 0
     ? missingFields.map((field) => `Ask the customer for ${field.replace(/[_.[\]]+/g, " ").trim()}.`)
-    : ["Review extracted line items, confirm pricing, and add fulfillment details before sending."];
+    : ["Review extracted request details, then configure catalog-backed products, pricing, inventory, and approvals before sending."];
+};
 
-const toQuoteItem = (line: ExtractionOutput["lines"][number], productId: string | null): Omit<QuoteItemCreateInput, "quote_id"> => {
-  const quantity = line.quantity.value ?? 1;
-  const unitPrice = line.unit_price.value ?? 0;
-  const discountBps = line.discount_bps.value ?? 0;
-  const subtotal = quantity * unitPrice;
-  const discount = (subtotal * discountBps) / 10_000;
-  return {
-    product_id: productId,
-    line_number: line.line_number,
-    sku: line.sku.value ?? "UNMATCHED",
-    description: line.description.value ?? "Manual review needed",
-    quantity,
-    unit_price: money(unitPrice),
-    discount_bps: discountBps,
-    discount_amount: money(discount),
-    line_total_amount: money(subtotal - discount),
-    metadata: { intake_created: true },
-  };
+const optionalString = (value: string | undefined) => (value && value.length > 0 ? value : null);
+
+const buildSla = (now = new Date()) => {
+  const due = new Date(now.getTime() + intakeSlaMinutes * 60 * 1000);
+  return { startedAt: now.toISOString(), dueAt: due.toISOString() };
 };
 
 export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<IntakeActionState> {
-  const data = quoteIntakeSchema.parse(input);
-
   try {
+    const data = quoteIntakeSchema.parse(input);
+    const sla = buildSla();
     const repositories = createRepositories(createServerSupabaseClient());
-    const existingCustomer = await repositories.customers.findByExternalId(data.customerEmail.toLowerCase());
+    const workflowService = createWorkflowService({ quotesRepository: repositories.quotes, workflowEventsRepository: repositories.workflowEvents });
+
+    const customerExternalId = data.customerEmail.toLowerCase();
+    const existingCustomer = await repositories.customers.findByExternalId(customerExternalId);
     const customer = existingCustomer ?? await repositories.customers.create({
-      external_id: data.customerEmail.toLowerCase(),
+      external_id: customerExternalId,
       name: data.customerName,
       legal_name: null,
-      domain: data.companyDomain || null,
+      domain: optionalString(data.companyDomain),
       billing_email: data.customerEmail,
       phone: null,
       billing_address: {},
@@ -74,42 +82,67 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
       discount_amount: 0,
       tax_amount: 0,
       total_amount: 0,
-      valid_until: data.validUntil || null,
+      valid_until: optionalString(data.validUntil),
       submitted_at: null,
       approved_at: null,
       sent_at: null,
       accepted_at: null,
-      metadata: { opportunity_name: data.opportunityName || null, intake: { attachment_name: data.attachmentName || null, request_text: data.requestText } },
+      metadata: {
+        opportunity_name: optionalString(data.opportunityName),
+        intake: {
+          request_text: data.requestText,
+          attachment_v1: data.attachmentName ? { file_name: data.attachmentName, status: "metadata_only" } : null,
+        },
+        seeded_scenario: data.seededScenarioId ? { id: data.seededScenarioId, selected_at: sla.startedAt } : null,
+        sla_started_at: sla.startedAt,
+        sla_due_at: sla.dueAt,
+      },
     });
 
-    await repositories.workflowEvents.record({ quote_id: quote.id, event_type: "created", actor_id: null, from_status: null, to_status: "draft", payload: { action: "quote_intake_created" } });
+    await repositories.workflowEvents.record({
+      quote_id: quote.id,
+      event_type: "created",
+      actor_id: null,
+      from_status: null,
+      to_status: "draft",
+      payload: { action: "quote_intake_created", sla_started_at: sla.startedAt, sla_due_at: sla.dueAt },
+    });
 
-    const extractionService = createExtractionService({ quotesRepository: repositories.quotes, workflowEventsRepository: repositories.workflowEvents, extractionAdapter: createQuoteExtractionAdapter() });
-    const extractionResult = await extractionService.extractAndPersist({ quoteId: quote.id, sourceText: data.requestText });
-    const missingFields = extractionResult.extraction?.missing_fields ?? ["line_items", "pricing", "requested_delivery_date"];
+    await workflowService.transitionQuote({ quoteId: quote.id, toStatus: "extracting", payload: { action: "quote_extraction_started" } });
 
-    if (extractionResult.extraction) {
-      const matches = await createProductMatchingService({ productsRepository: repositories.products }).matchLines(
-        extractionResult.extraction.lines.map((line) => ({ lineNumber: line.line_number, sku: line.sku.value, description: line.description.value })),
-      );
-      const items = extractionResult.extraction.lines.map((line) => toQuoteItem(line, matches.find((match) => match.lineNumber === line.line_number)?.product?.id ?? null));
-      if (items.length > 0) {
-        await repositories.quotes.replaceItems(quote.id, items);
-        const totals = lineTotals(items);
-        await repositories.quotes.update(quote.id, { subtotal_amount: totals.subtotal, discount_amount: totals.discount, total_amount: totals.total });
-      }
-    }
+    const extractionResult = await createExtractionService({
+      quotesRepository: repositories.quotes,
+      workflowEventsRepository: repositories.workflowEvents,
+      extractionAdapter: createQuoteExtractionAdapter(),
+    }).extractAndPersist({ quoteId: quote.id, sourceText: data.requestText });
 
-    const finalQuote = await repositories.quotes.findById(quote.id);
+    const extraction = extractionResult.extraction;
+    const missingFields = extraction?.missing_fields ?? ["requested_items", "delivery_date", "delivery_location"];
+    const clarificationQuestions = extraction?.clarification_questions ?? missingFields.map((field) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
+
     return {
       ok: true,
       quoteId: quote.id,
       quoteNumber: quote.quote_number,
-      status: finalQuote?.status ?? extractionResult.quote.status,
-      extractionStatus: extractionResult.extraction ? "completed" : "manual_fallback",
+      status: extractionResult.quote.status,
+      slaStartedAt: sla.startedAt,
+      slaDueAt: sla.dueAt,
+      extractionStatus: extraction ? "completed" : "manual_fallback",
+      extractionSummary: {
+        requestedItemCount: extraction?.requested_items.length ?? 0,
+        overallConfidence: extraction?.overall_confidence ?? null,
+        ambiguityCount: extraction?.ambiguities.length ?? 0,
+        missingFieldCount: missingFields.length,
+      },
       missingFields,
-      suggestions: toSuggestions(missingFields),
-      previewLines: extractionResult.extraction?.lines.map((line) => ({ sku: line.sku.value, description: line.description.value, quantity: line.quantity.value })) ?? [],
+      clarificationQuestions,
+      manualFallback: !extraction,
+      suggestions: toSuggestions(missingFields, clarificationQuestions),
+      previewLines: extraction?.requested_items.map((line) => ({
+        sku: line.requested_sku.value,
+        description: line.raw_item_description.value,
+        quantity: line.quantity.value,
+      })) ?? [],
     };
   } catch (error) {
     return {
