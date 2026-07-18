@@ -3,6 +3,7 @@ export {
   createDemoAuthAdapter,
   createMockCrmAdapter,
   createMockErpInventoryAdapter,
+  createMockNotificationAdapter,
   createMockNotificationsAdapter,
   createMockPricingSourceMetadataAdapter,
 } from "./mocks";
