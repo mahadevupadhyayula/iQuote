@@ -5,6 +5,7 @@ import type { QuoteStatus } from "@/lib/domain/quote-statuses";
 import { extractionOutputSchema, type ExtractionOutput } from "@/lib/schemas/extraction-schema";
 import type { QuotesRepository } from "@/lib/repositories/quotes";
 import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-events";
+import { createWorkflowService } from "@/lib/services/workflow-service";
 
 export type ExtractionServiceOptions = {
   quotesRepository: QuotesRepository;
@@ -83,17 +84,15 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
 
       return { quote: updatedQuote, extraction: normalizedExtraction };
     } catch (error) {
-      const updatedQuote = await quotesRepository.update(quoteId, {
-        status: needsInformationStatus,
+      await quotesRepository.update(quoteId, {
         metadata: enableManualEntryMetadata(quote.metadata, "openai_extraction_failed_or_invalid", error),
       });
 
-      await workflowEventsRepository.record({
-        quote_id: quoteId,
-        event_type: "extraction_failed",
-        actor_id: actorId,
-        from_status: quote.status,
-        to_status: needsInformationStatus,
+      const workflowService = createWorkflowService({ quotesRepository, workflowEventsRepository });
+      const { quote: updatedQuote } = await workflowService.transitionQuote({
+        quoteId,
+        toStatus: needsInformationStatus,
+        actorId,
         payload: { action: "quote_extraction_failed", source_text: sourceText, error_message: error instanceof Error ? error.message : String(error) },
       });
 
