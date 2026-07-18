@@ -1,6 +1,8 @@
 export const quoteStatuses = [
   "draft",
+  "extracting",
   "needs_information",
+  "configuring",
   "pending_approval",
   "approved",
   "sent",
@@ -13,11 +15,13 @@ export const quoteStatuses = [
 export type QuoteStatus = (typeof quoteStatuses)[number];
 
 export const terminalQuoteStatuses = ["accepted", "rejected", "expired", "cancelled"] as const satisfies readonly QuoteStatus[];
-export const editableQuoteStatuses = ["draft", "needs_information", "pending_approval"] as const satisfies readonly QuoteStatus[];
+export const editableQuoteStatuses = ["draft", "extracting", "needs_information", "configuring", "pending_approval"] as const satisfies readonly QuoteStatus[];
 
 export const quoteStatusLabels: Record<QuoteStatus, string> = {
   draft: "Draft",
+  extracting: "Extracting",
   needs_information: "Needs information",
+  configuring: "Configuring",
   pending_approval: "Pending approval",
   approved: "Approved",
   sent: "Sent",
@@ -28,8 +32,10 @@ export const quoteStatusLabels: Record<QuoteStatus, string> = {
 };
 
 export const quoteStatusTransitions: Record<QuoteStatus, readonly QuoteStatus[]> = {
-  draft: ["needs_information", "pending_approval", "approved", "sent", "cancelled"],
-  needs_information: ["draft", "pending_approval", "cancelled"],
+  draft: ["extracting", "needs_information", "pending_approval", "approved", "sent", "cancelled"],
+  extracting: ["needs_information", "configuring", "cancelled"],
+  needs_information: ["draft", "configuring", "cancelled"],
+  configuring: ["pending_approval", "approved", "sent", "cancelled"],
   pending_approval: ["approved", "rejected", "cancelled"],
   approved: ["sent", "cancelled"],
   sent: ["accepted", "rejected", "expired", "cancelled"],

@@ -24,7 +24,9 @@ create type public.discount_policy_type as enum (
 
 create type public.quote_status as enum (
   'draft',
+  'extracting',
   'needs_information',
+  'configuring',
   'pending_approval',
   'approved',
   'sent',
@@ -44,6 +46,8 @@ create type public.approval_status as enum (
 create type public.workflow_event_type as enum (
   'created',
   'updated',
+  'extraction_started',
+  'extraction_completed',
   'extraction_failed',
   'submitted_for_approval',
   'approval_requested',

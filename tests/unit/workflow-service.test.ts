@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { QuoteStatus } from "@/lib/domain/quote-statuses";
-import type { WorkflowEventType } from "@/lib/domain/workflow-events";
 import { createWorkflowService, WorkflowTransitionError, workflowTransitions } from "@/lib/services/workflow-service";
 import type { QuoteWithItems } from "@/lib/repositories/quotes";
 
@@ -62,9 +61,11 @@ const buildHarness = (quote: QuoteWithItems, events: Record<string, unknown>[] =
 
 describe("workflow service", () => {
   it("declares every V1 legal transition with a workflow event type", () => {
-    const expectedTransitions: Record<QuoteStatus, Partial<Record<QuoteStatus, WorkflowEventType>>> = {
-      draft: { needs_information: "updated", pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
-      needs_information: { draft: "updated", pending_approval: "submitted_for_approval", cancelled: "cancelled" },
+    const expectedTransitions: Record<QuoteStatus, Partial<Record<QuoteStatus, string>>> = {
+      draft: { extracting: "extraction_started", needs_information: "updated", pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
+      extracting: { needs_information: "dynamic", configuring: "extraction_completed", cancelled: "cancelled" },
+      needs_information: { draft: "updated", configuring: "updated", cancelled: "cancelled" },
+      configuring: { pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
       pending_approval: { approved: "approved", rejected: "rejected", cancelled: "cancelled" },
       approved: { sent: "sent", cancelled: "cancelled" },
       sent: { accepted: "accepted", rejected: "rejected", expired: "expired", cancelled: "cancelled" },
@@ -74,7 +75,7 @@ describe("workflow service", () => {
       cancelled: {},
     };
 
-    expect(Object.fromEntries(Object.entries(workflowTransitions).map(([from, transitions]) => [from, Object.fromEntries(Object.entries(transitions).map(([to, transition]) => [to, transition.eventType]))]))).toEqual(expectedTransitions);
+    expect(Object.fromEntries(Object.entries(workflowTransitions).map(([from, transitions]) => [from, Object.fromEntries(Object.entries(transitions).map(([to, transition]) => [to, typeof transition.eventType === "function" ? "dynamic" : transition.eventType]))]))).toEqual(expectedTransitions);
   });
 
   it("applies legal transitions, timestamps, and event logging", async () => {
@@ -106,6 +107,44 @@ describe("workflow service", () => {
 
   it("enforces guard conditions before status updates", async () => {
     const { service, quotesRepository, workflowEventsRepository } = buildHarness(buildQuote("draft", []));
+
+    await expect(service.transitionQuote({ quoteId, toStatus: "pending_approval" })).rejects.toThrow("at least one item");
+    expect(quotesRepository.updateStatus).not.toHaveBeenCalled();
+    expect(workflowEventsRepository.record).not.toHaveBeenCalled();
+  });
+
+
+  it("supports extraction and configuration workflow events", async () => {
+    const { service, workflowEventsRepository } = buildHarness(buildQuote("draft"));
+
+    await service.transitionQuote({ quoteId, toStatus: "extracting", actorId, payload: { action: "quote_extraction_started" } });
+    const completed = await service.transitionQuote({ quoteId, toStatus: "configuring", actorId, payload: { action: "quote_extraction_completed" } });
+
+    expect(completed.quote.status).toBe("configuring");
+    expect(workflowEventsRepository.record).toHaveBeenNthCalledWith(1, expect.objectContaining({ event_type: "extraction_started", from_status: "draft", to_status: "extracting" }));
+    expect(workflowEventsRepository.record).toHaveBeenNthCalledWith(2, expect.objectContaining({ event_type: "extraction_completed", from_status: "extracting", to_status: "configuring" }));
+  });
+
+  it("records extraction failure when leaving extracting for needs information", async () => {
+    const { service, workflowEventsRepository } = buildHarness(buildQuote("extracting"));
+
+    const result = await service.transitionQuote({ quoteId, toStatus: "needs_information", actorId, payload: { action: "quote_extraction_failed" } });
+
+    expect(result.quote.status).toBe("needs_information");
+    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "extraction_failed", from_status: "extracting", to_status: "needs_information" }));
+  });
+
+  it("allows rep clarification to move needs information quotes into configuring", async () => {
+    const { service, workflowEventsRepository } = buildHarness(buildQuote("needs_information"));
+
+    const result = await service.transitionQuote({ quoteId, toStatus: "configuring", actorId, payload: { action: "apply_rep_corrections" } });
+
+    expect(result.quote.status).toBe("configuring");
+    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "updated", from_status: "needs_information", to_status: "configuring" }));
+  });
+
+  it("keeps configuration to approval guarded by quote readiness rules", async () => {
+    const { service, quotesRepository, workflowEventsRepository } = buildHarness(buildQuote("configuring", []));
 
     await expect(service.transitionQuote({ quoteId, toStatus: "pending_approval" })).rejects.toThrow("at least one item");
     expect(quotesRepository.updateStatus).not.toHaveBeenCalled();

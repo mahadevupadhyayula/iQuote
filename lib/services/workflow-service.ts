@@ -9,13 +9,14 @@ import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-event
 type WorkflowQuote = QuoteWithItems | QuoteRecord;
 
 export type WorkflowTransition = {
-  readonly eventType: WorkflowEventType;
+  readonly eventType: WorkflowEventType | ((payload: Record<string, unknown>) => WorkflowEventType);
   readonly guard?: (quote: WorkflowQuote) => string | null;
   readonly timestamps?: readonly (keyof Pick<QuoteRecord, "submitted_at" | "approved_at" | "sent_at" | "accepted_at">)[];
 };
 
 export const workflowTransitions = {
   draft: {
+    extracting: { eventType: "extraction_started" },
     needs_information: { eventType: "updated" },
     pending_approval: {
       eventType: "submitted_for_approval",
@@ -26,13 +27,24 @@ export const workflowTransitions = {
     sent: { eventType: "sent", timestamps: ["sent_at"] },
     cancelled: { eventType: "cancelled" },
   },
+  extracting: {
+    needs_information: { eventType: (payload) => (payload.action === "quote_extraction_failed" ? "extraction_failed" : "extraction_completed") },
+    configuring: { eventType: "extraction_completed" },
+    cancelled: { eventType: "cancelled" },
+  },
   needs_information: {
     draft: { eventType: "updated" },
+    configuring: { eventType: "updated" },
+    cancelled: { eventType: "cancelled" },
+  },
+  configuring: {
     pending_approval: {
       eventType: "submitted_for_approval",
       timestamps: ["submitted_at"],
       guard: (quote) => ("items" in quote && quote.items.length === 0 ? "Quote must have at least one item before approval submission." : null),
     },
+    approved: { eventType: "approved", timestamps: ["approved_at"] },
+    sent: { eventType: "sent", timestamps: ["sent_at"] },
     cancelled: { eventType: "cancelled" },
   },
   pending_approval: {
@@ -117,7 +129,7 @@ export const createWorkflowService = ({ quotesRepository, workflowEventsReposito
     if (!quote) throw new Error(`Quote ${quoteId} was not found.`);
 
     const fromStatus = quote.status as QuoteStatus;
-    const transition = workflowTransitions[fromStatus][toStatus];
+    const transition = (workflowTransitions as Record<QuoteStatus, Partial<Record<QuoteStatus, WorkflowTransition>>>)[fromStatus][toStatus];
     if (!transition) throw new WorkflowTransitionError(`Cannot transition quote ${quoteId} from ${quote.status} to ${toStatus}.`);
 
     const guardFailure = transition.guard?.(quote);
@@ -130,7 +142,7 @@ export const createWorkflowService = ({ quotesRepository, workflowEventsReposito
     const updatedQuote = await quotesRepository.updateStatus(quoteId, toStatus, timestamps);
     const event = await workflowEventsRepository.record({
       quote_id: quoteId,
-      event_type: transition.eventType,
+      event_type: typeof transition.eventType === "function" ? transition.eventType(payload) : transition.eventType,
       actor_id: actorId,
       from_status: fromStatus,
       to_status: toStatus,

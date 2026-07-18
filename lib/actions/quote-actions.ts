@@ -148,7 +148,7 @@ export async function applyRepCorrections(input: ApplyRepCorrectionsActionInput)
   const updated = await repositories.quotes.update(data.quote_id, { customer_id: data.customer_id ?? quote.customer_id, opportunity_id: data.opportunity_id ?? quote.opportunity_id, currency_code: data.currency_code ?? quote.currency_code, valid_until: data.valid_until ?? quote.valid_until, subtotal_amount: totals.subtotal, discount_amount: totals.discount, total_amount: totals.total, metadata: { ...quote.metadata, ...data.metadata } });
   const workflowService = createWorkflowService({ quotesRepository: repositories.quotes, workflowEventsRepository: repositories.workflowEvents });
   const transitioned = updated.status === "needs_information"
-    ? (await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "draft", actorId: data.actor_id ?? null, payload: { action: "apply_rep_corrections", line_count: latest.items.length } })).quote
+    ? (await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "configuring", actorId: data.actor_id ?? null, payload: { action: "apply_rep_corrections", line_count: latest.items.length } })).quote
     : updated;
   await recordUpdate(transitioned, data.actor_id, "apply_rep_corrections", { line_count: latest.items.length });
   revalidatePath(quotePath(data.quote_id));
