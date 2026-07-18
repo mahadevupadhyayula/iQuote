@@ -7,10 +7,19 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "db:migrate": "supabase db reset --no-seed",
+    "db:seed": "supabase db reset",
+    "db:reset": "supabase db reset",
+    "demo:reset": "curl -X POST http://127.0.0.1:3000/api/demo/reset",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:scenario-a": "playwright test tests/e2e/scenario-a-straight-through.spec.ts",
+    "test:e2e:scenario-b": "playwright test tests/e2e/scenario-b-discount-exception.spec.ts",
+    "test:e2e:scenario-c": "playwright test tests/e2e/scenario-c-inventory-exception.spec.ts"
   },
   "dependencies": {
     "next": "latest",
