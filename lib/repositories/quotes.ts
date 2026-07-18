@@ -33,6 +33,16 @@ export const createQuotesRepository = (client: RepositoryClient) => ({
     return data ? parseQuoteWithItems(data) : null;
   },
 
+  async listRecent(limit = 25) {
+    const { data, error } = await client
+      .from("quotes")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    throwRepositoryError("List recent quotes", error);
+    return quoteRecordSchema.array().parse(data ?? []);
+  },
+
   async listByCustomer(customerId: string, limit = 25) {
     const { data, error } = await client
       .from("quotes")
