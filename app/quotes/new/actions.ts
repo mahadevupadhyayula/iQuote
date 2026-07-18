@@ -3,8 +3,10 @@
 import { createQuoteExtractionAdapter } from "@/lib/adapters/ai/quote-extraction-adapter";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
+import { toIntakeRequirementsMetadata, toReviewRequiredQuoteItems, type IntakeLinePersistenceInput } from "@/lib/rules/intake-requirements-rules";
 import { quoteIntakeSchema, type QuoteIntakeInput } from "@/lib/schemas/quote-intake";
 import { createExtractionService } from "@/lib/services/extraction-service";
+import { createProductResolverService } from "@/lib/services/product-resolver-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 
 type PreviewLine = { sku: string | null; description: string | null; quantity: number | null };
@@ -117,6 +119,39 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
     }).extractAndPersist({ quoteId: quote.id, sourceText: data.requestText });
 
     const extraction = extractionResult.extraction;
+
+    if (extraction) {
+      const productResolver = createProductResolverService({ productsRepository: repositories.products });
+      const persistedLines: IntakeLinePersistenceInput[] = await Promise.all(extraction.requested_items.map(async (line) => {
+        const requestedSku = line.requested_sku.value;
+        const description = line.raw_item_description.value;
+        const deterministicResolution = await productResolver.resolve({ sku: requestedSku, alias: requestedSku, description });
+        const searchQuery = requestedSku ?? description;
+        const candidates = searchQuery ? await repositories.products.search(searchQuery, 5) : [];
+
+        return {
+          lineNumber: line.line_number,
+          requestedSku,
+          description,
+          quantity: line.quantity.value,
+          deterministicResolution,
+          candidates: deterministicResolution.product && candidates.every((candidate) => candidate.id !== deterministicResolution.product?.id)
+            ? [deterministicResolution.product, ...candidates].slice(0, 5)
+            : candidates,
+        };
+      }));
+
+      await repositories.quotes.update(quote.id, {
+        metadata: {
+          ...extractionResult.quote.metadata,
+          intake_persistence: toIntakeRequirementsMetadata(extraction, persistedLines),
+        },
+      });
+
+      const reviewItems = toReviewRequiredQuoteItems(persistedLines);
+      if (reviewItems.length > 0) await repositories.quotes.replaceItems(quote.id, reviewItems);
+    }
+
     const missingFields = extraction?.missing_fields ?? ["requested_items", "delivery_date", "delivery_location"];
     const clarificationQuestions = extraction?.clarification_questions ?? missingFields.map((field) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
 
