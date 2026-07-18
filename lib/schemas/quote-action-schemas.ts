@@ -60,6 +60,10 @@ export const applyRepCorrectionsActionSchema = z.object({
   valid_until: dateSchema.optional().nullable(),
   lines: z.array(actionLineSchema).min(1).optional(),
   metadata: jsonObjectSchema.default({}),
+  requirements: jsonObjectSchema.optional(),
+  clarification_answers: jsonObjectSchema.optional(),
+  product_candidates: jsonObjectSchema.optional(),
+  rep_confirmation: jsonObjectSchema.optional(),
 });
 
 export const selectFulfillmentActionSchema = z.object({
@@ -102,6 +106,16 @@ export const saveQuoteDraftActionSchema = z.object({
   valid_until: dateSchema.optional().nullable(),
   lines: z.array(actionLineSchema).optional(),
   metadata: jsonObjectSchema.default({}),
+  requirements: jsonObjectSchema.optional(),
+  clarification_answers: jsonObjectSchema.optional(),
+  product_candidates: jsonObjectSchema.optional(),
+  rep_confirmation: jsonObjectSchema.optional(),
+});
+
+export const continueQuoteConfigurationActionSchema = z.object({
+  quote_id: uuidSchema,
+  actor_id: optionalUuidSchema,
+  idempotency_key: z.string().trim().min(1).optional(),
 });
 
 export type CreateQuoteDraftActionInput = z.infer<typeof createQuoteDraftActionSchema>;
@@ -112,5 +126,6 @@ export type SubmitQuoteForApprovalActionInput = z.infer<typeof submitQuoteForApp
 export type GenerateQuoteActionInput = z.infer<typeof generateQuoteActionSchema>;
 export type SendQuoteActionInput = z.infer<typeof sendQuoteActionSchema>;
 export type SaveQuoteDraftActionInput = z.infer<typeof saveQuoteDraftActionSchema>;
+export type ContinueQuoteConfigurationActionInput = z.infer<typeof continueQuoteConfigurationActionSchema>;
 
 export type QuoteAction = z.infer<typeof quoteActionSchema>;
