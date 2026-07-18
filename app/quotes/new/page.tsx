@@ -1,7 +1,18 @@
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import { QuoteIntakeForm } from "@/components/quotes/quote-intake-form";
+import { createServerSupabaseClient } from "@/lib/db/server";
+import { createRepositories } from "@/lib/repositories";
 
-export default function NewQuotePage() {
+export default async function NewQuotePage() {
+  const repositories = createRepositories(createServerSupabaseClient());
+  const recentQuotes = await repositories.quotes.listRecent(4);
+  const recentActivity = recentQuotes.map((quote) => ({
+    id: quote.id,
+    label: `${quote.quote_number} moved through ${quote.status.replaceAll("_", " ")}`,
+    description: `Workflow event source: recent quote activity for ${quote.currency_code} quote.`,
+    timestamp: quote.updated_at,
+  }));
+
   return (
     <WorkspaceLayout currentStep="intake" contentClassName="space-y-8">
       <div className="space-y-3">
@@ -17,7 +28,7 @@ export default function NewQuotePage() {
           incomplete.
         </p>
       </div>
-      <QuoteIntakeForm />
+      <QuoteIntakeForm recentActivity={recentActivity} />
     </WorkspaceLayout>
   );
 }
