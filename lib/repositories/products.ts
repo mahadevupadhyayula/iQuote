@@ -15,6 +15,8 @@ export type ProductAliasRecord = {
   created_at: string;
 };
 
+const normalizeProductLookupValue = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+
 export const createProductsRepository = (client: RepositoryClient) => {
   const findProductsByAlias = async (alias: string) => {
     const { data, error } = await client.from("product_aliases").select("product:products(*)").ilike("alias", alias);
@@ -33,6 +35,20 @@ export const createProductsRepository = (client: RepositoryClient) => {
     const { data, error } = await client.from("products").select("*").eq("sku", sku).maybeSingle();
     throwRepositoryError("Find product by sku", error);
     return data ? productRecordSchema.parse(data) : null;
+  },
+
+  async findByName(name: string) {
+    const { data, error } = await client.from("products").select("*").eq("name", name).maybeSingle();
+    throwRepositoryError("Find product by name", error);
+    return data ? productRecordSchema.parse(data) : null;
+  },
+
+  async findByNormalizedName(name: string) {
+    const { data, error } = await client.from("products").select("*").order("sku");
+    throwRepositoryError("Find product by normalized name", error);
+    const normalizedName = normalizeProductLookupValue(name);
+    const products = productRecordSchema.array().parse(data ?? []).filter((product) => normalizeProductLookupValue(product.name) === normalizedName);
+    return products.length === 1 ? products[0] : null;
   },
 
   async search(query: string, limit = 20) {

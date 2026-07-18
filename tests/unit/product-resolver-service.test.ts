@@ -20,8 +20,10 @@ const product = (overrides: Partial<ProductRecord> = {}): ProductRecord => ({
   ...overrides,
 });
 
-const repository = (products: { sku?: ProductRecord | null; alias?: ProductRecord | null; replacement?: ProductRecord | null } = {}) => ({
-  findBySku: vi.fn(async () => products.sku ?? null),
+const repository = (products: { sku?: ProductRecord | null; name?: ProductRecord | null; normalizedName?: ProductRecord | null; alias?: ProductRecord | null; replacement?: ProductRecord | null } = {}) => ({
+  findBySku: vi.fn(async (sku: string) => (sku === products.sku?.sku ? products.sku : null) ?? null),
+  findByName: vi.fn(async () => products.name ?? null),
+  findByNormalizedName: vi.fn(async () => products.normalizedName ?? null),
   findByAlias: vi.fn(async () => products.alias ?? null),
   findReplacement: vi.fn(async () => products.replacement ?? null),
 });
@@ -38,7 +40,41 @@ describe("createProductResolverService", () => {
     expect(productsRepository.findByAlias).not.toHaveBeenCalled();
   });
 
-  it("resolves exact alias second when SKU is missing", async () => {
+  it("resolves normalized SKU before product-name or alias matches", async () => {
+    const skuProduct = product({ sku: "ax100" });
+    const productsRepository = repository({ sku: skuProduct });
+
+    const result = await createProductResolverService({ productsRepository }).resolve({ sku: "AX-100", alias: "legacy HX", description: "AX-100 Pump" });
+
+    expect(result).toMatchObject({ product: skuProduct, method: "sku", confidence: 1, relationship: null });
+    expect(productsRepository.findBySku).toHaveBeenNthCalledWith(1, "AX-100");
+    expect(productsRepository.findBySku).toHaveBeenNthCalledWith(2, "ax100");
+    expect(productsRepository.findByAlias).not.toHaveBeenCalled();
+  });
+
+  it("resolves exact product name before exact alias", async () => {
+    const nameProduct = product({ sku: "NAME-100", name: "AX-100 Pump" });
+    const aliasProduct = product({ id: "10000000-0000-4000-8000-000000000005", sku: "ALIAS-100" });
+    const productsRepository = repository({ name: nameProduct, alias: aliasProduct });
+
+    const result = await createProductResolverService({ productsRepository }).resolve({ alias: "AX-100 Pump Alias", description: "AX-100 Pump" });
+
+    expect(result).toMatchObject({ product: nameProduct, method: "product_name", confidence: 1, relationship: null });
+    expect(productsRepository.findByAlias).not.toHaveBeenCalled();
+  });
+
+  it("resolves normalized product name before exact alias", async () => {
+    const nameProduct = product({ sku: "NAME-100", name: "AX 100 Pump" });
+    const productsRepository = repository({ normalizedName: nameProduct });
+
+    const result = await createProductResolverService({ productsRepository }).resolve({ alias: "AX pump alias", description: "AX-100 Pump" });
+
+    expect(result).toMatchObject({ product: nameProduct, method: "product_name", confidence: 1, relationship: null });
+    expect(productsRepository.findByNormalizedName).toHaveBeenCalledWith("ax100pump");
+    expect(productsRepository.findByAlias).not.toHaveBeenCalled();
+  });
+
+  it("resolves exact alias after SKU and product-name lookups miss", async () => {
     const aliasProduct = product({ sku: "HX-500" });
     const productsRepository = repository({ alias: aliasProduct });
 
@@ -78,7 +114,7 @@ describe("createProductResolverService", () => {
 
     const result = await createProductResolverService({ productsRepository }).resolve({ sku: "MISSING", alias: "missing alias", description: "missing description" });
 
-    expect(result).toEqual({ product: null, originalInput: { sku: "MISSING", alias: "missing alias", description: "missing description" }, method: "unmatched", confidence: 0, reason: "No exact SKU or alias match found.", relationship: null });
+    expect(result).toEqual({ product: null, originalInput: { sku: "MISSING", alias: "missing alias", description: "missing description" }, method: "unmatched", confidence: 0, reason: "No exact SKU, product-name, or alias match found.", relationship: null });
     expect(productsRepository.findReplacement).not.toHaveBeenCalled();
   });
 });
