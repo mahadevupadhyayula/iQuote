@@ -41,6 +41,7 @@ export const createApprovalsRepository = (client: RepositoryClient) => ({
       .from("approvals")
       .update({ status, approver_id: approverId, comments: comments ?? null, decided_at: new Date().toISOString() })
       .eq("id", id)
+      .eq("status", "pending")
       .select("*")
       .single();
     throwRepositoryError("Decide approval", error);
