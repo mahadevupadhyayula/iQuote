@@ -14,6 +14,8 @@ const policy = (overrides: Partial<DiscountPolicyRecord>): DiscountPolicyRecord 
   discount_bps: 800,
   max_discount_bps: 1200,
   amount_off: 0,
+  conditions: {},
+  minimum_margin_bps: 0,
   starts_on: "2026-01-01",
   ends_on: null,
   active: true,
