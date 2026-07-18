@@ -45,6 +45,7 @@ const buildHarness = (quote: QuoteWithItems, events: Record<string, unknown>[] =
   };
   const workflowEventsRepository = {
     listByQuote: vi.fn(async () => events),
+    findByIdempotencyKey: vi.fn(async (_quoteId: string, idempotencyKey: string) => events.find((event) => event.idempotency_key === idempotencyKey || (event.payload as Record<string, unknown>).idempotency_key === idempotencyKey) ?? null),
     record: vi.fn(async (input: Record<string, unknown>) => ({ id: "55555555-5555-4555-8555-555555555555", created_at: timestamp, ...input })),
   };
 
@@ -90,7 +91,8 @@ describe("workflow service", () => {
       actor_id: actorId,
       from_status: "draft",
       to_status: "pending_approval",
-      payload: { source: "unit_test", idempotency_key: "submit-1" },
+      payload: { source: "unit_test" },
+      idempotency_key: "submit-1",
     });
   });
 
@@ -118,7 +120,8 @@ describe("workflow service", () => {
       actor_id: actorId,
       from_status: "approved",
       to_status: "sent",
-      payload: { idempotency_key: "send-1" },
+      payload: {},
+      idempotency_key: "send-1",
       created_at: timestamp,
     };
     const { service, quotesRepository, workflowEventsRepository } = buildHarness(buildQuote("sent"), [originalEvent]);
@@ -126,6 +129,26 @@ describe("workflow service", () => {
     const result = await service.transitionQuote({ quoteId, toStatus: "sent", actorId, idempotencyKey: "send-1" });
 
     expect(result).toMatchObject({ event: originalEvent, idempotent: true });
+    expect(quotesRepository.updateStatus).not.toHaveBeenCalled();
+    expect(workflowEventsRepository.record).not.toHaveBeenCalled();
+  });
+
+  it("rejects conflicting idempotency key reuse before status updates", async () => {
+    const originalEvent = {
+      id: "66666666-6666-4666-8666-666666666666",
+      quote_id: quoteId,
+      event_type: "sent",
+      actor_id: actorId,
+      from_status: "approved",
+      to_status: "sent",
+      payload: { action: "send_quote" },
+      idempotency_key: "send-1",
+      created_at: timestamp,
+    };
+    const { service, quotesRepository, workflowEventsRepository } = buildHarness(buildQuote("sent"), [originalEvent]);
+
+    await expect(service.transitionQuote({ quoteId, toStatus: "sent", actorId, payload: { action: "changed" }, idempotencyKey: "send-1" })).rejects.toThrow("already used");
+
     expect(quotesRepository.updateStatus).not.toHaveBeenCalled();
     expect(workflowEventsRepository.record).not.toHaveBeenCalled();
   });
