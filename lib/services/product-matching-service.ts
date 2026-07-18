@@ -1,9 +1,8 @@
 import "server-only";
 
-import { z } from "zod";
-
 import { createOpenAIClient, getOpenAIModel, type OpenAIResponsesClient } from "@/lib/adapters/ai/openai-client";
 import type { ProductsRepository } from "@/lib/repositories/products";
+import { productMatchingSuggestionSchema } from "@/lib/schemas/product-matching";
 import type { ProductRecord } from "@/lib/schemas/shared-records";
 import { createProductResolverService } from "@/lib/services/product-resolver-service";
 
@@ -30,12 +29,6 @@ type ProductMatchingServiceOptions = {
   client?: OpenAIResponsesClient;
   model?: string;
 };
-
-const aiRankingSchema = z.object({
-  product_id: z.string().nullable(),
-  confidence: z.number().min(0).max(1),
-  reason: z.string().min(1),
-});
 
 const getResponseText = (response: { output_text?: string; output?: unknown }) => {
   if (typeof response.output_text === "string") return response.output_text;
@@ -90,12 +83,12 @@ export const createProductMatchingService = ({ productsRepository, client = crea
           { role: "user", content: [{ type: "input_text", text: JSON.stringify({ extracted_line: line, candidates: candidates.map(({ id, sku, name, description }) => ({ id, sku, name, description })) }) }] },
         ],
       });
-      const suggestion = aiRankingSchema.parse(JSON.parse(getResponseText(response)));
-      const product = candidates.find((candidate) => candidate.id === suggestion.product_id) ?? null;
-      if (suggestion.product_id && !product) {
+      const suggestion = productMatchingSuggestionSchema.parse(JSON.parse(getResponseText(response)));
+      const product = suggestion.product_id === null ? null : candidates.find((candidate) => candidate.id === suggestion.product_id) ?? null;
+      if (suggestion.product_id !== null && !product) {
         return toMatch(line, null, "unmatched", suggestion.confidence, true, candidates, "AI selected a product id that was not in the supplied candidate list; rep confirmation required.");
       }
-      if (!product || suggestion.confidence < 0.75) return toMatch(line, null, "unmatched", suggestion.confidence, true, candidates, suggestion.reason || "AI suggestion was ambiguous; rep confirmation required.");
+      if (!product || suggestion.confidence < 0.75 || suggestion.ambiguous === true) return toMatch(line, null, "unmatched", suggestion.confidence, true, candidates, suggestion.reason || "AI suggestion was ambiguous; rep confirmation required.");
       return toMatch(line, product, "ai_suggestion", suggestion.confidence, true, candidates, `${suggestion.reason} Rep confirmation required for AI-ranked product match.`);
     } catch (error) {
       return toMatch(line, null, "unmatched", 0, true, candidates, error instanceof Error ? `${error.message}; rep confirmation required.` : "AI product suggestion failed; rep confirmation required.");
