@@ -1,4 +1,5 @@
 import type { InventoryAvailability } from "@/lib/domain/inventory";
+import type { ResolvedPrice } from "@/lib/rules/pricing-rules";
 
 export type AdapterUserRole = "sales_representative" | "sales_director" | "product_manager" | "finance" | "admin";
 
@@ -23,6 +24,8 @@ export type CrmAccount = {
   domain: string | null;
   billingEmail: string | null;
   phone: string | null;
+  sourceName: string;
+  sourceVersion: string;
 };
 
 export type CrmOpportunity = {
@@ -33,6 +36,8 @@ export type CrmOpportunity = {
   ownerId: string | null;
   currencyCode: string;
   expectedCloseDate: string | null;
+  sourceName: string;
+  sourceVersion: string;
 };
 
 export type CrmAdapter = {
@@ -128,6 +133,17 @@ export type PricingSourceMetadata = {
 
 export type PricingSourceMetadataAdapter = {
   getMetadata(input?: { currencyCode?: string; onDate?: string }): Promise<PricingSourceMetadata>;
+};
+
+export type PricingAdapter = PricingSourceMetadataAdapter & {
+  resolvePrice(input: {
+    productId: string;
+    customerId: string;
+    customerTier?: string | null;
+    quantity: number;
+    currencyCode: string;
+    onDate?: string;
+  }): Promise<ResolvedPrice>;
 };
 
 export type NotificationMessage = {
