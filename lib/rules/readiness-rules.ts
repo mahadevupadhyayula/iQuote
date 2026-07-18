@@ -1,4 +1,6 @@
 import type { ApprovalStatus } from "@/lib/domain/approvals";
+import { terminalQuoteStatuses, type QuoteStatus } from "@/lib/domain/quote-statuses";
+import type { ApprovalEvaluation } from "@/lib/rules/approval-rules";
 import type { InventoryDecision } from "@/lib/rules/inventory-rules";
 import type { MarginFloorResult } from "@/lib/rules/margin-rules";
 
@@ -6,14 +8,21 @@ export type QuoteReadinessBlockerCode =
   | "missing_required_information"
   | "invalid_product"
   | "missing_price"
+  | "missing_price_source"
   | "stale_price"
   | "pricing_exception"
+  | "missing_unit_cost"
   | "unresolved_inventory"
   | "stale_inventory"
+  | "missing_commercial_calculation"
+  | "discount_policy_not_evaluated"
+  | "approval_outcome_missing"
   | "margin_policy_failed"
   | "approval_pending"
   | "approval_rejected"
   | "payment_terms_missing"
+  | "sla_due_time_missing"
+  | "completion_time_missing"
   | "blocking_exception";
 
 export type QuoteReadinessBlocker = {
@@ -40,7 +49,10 @@ export type ReadinessQuoteLine = {
 export type ReadinessPrice = {
   productId: string;
   unitPrice: number | null;
+  unitCost?: number | null;
   currencyCode: string;
+  sourceName?: string | null;
+  sourceVersion?: string | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
   blocked?: boolean;
@@ -65,6 +77,13 @@ export type ReadinessException = {
   productId?: string;
 };
 
+export type ReadinessCommercialCalculation = {
+  subtotalAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  grossMarginBps: number;
+};
+
 export type EvaluateQuoteReadinessInput = {
   customerId?: string | null;
   currencyCode?: string | null;
@@ -72,16 +91,23 @@ export type EvaluateQuoteReadinessInput = {
   products: ReadinessProduct[];
   prices: ReadinessPrice[];
   inventoryDecisions: InventoryDecision[];
-  marginPolicy: MarginFloorResult;
+  marginPolicy?: MarginFloorResult | null;
+  commercialCalculation?: ReadinessCommercialCalculation | null;
+  discountPolicyEvaluation?: ApprovalEvaluation | null;
   approvals?: ReadinessApproval[];
   paymentTerms?: ReadinessPaymentTerms | null;
   blockingExceptions?: ReadinessException[];
   onDate?: string;
+  quoteStatus?: QuoteStatus | null;
+  slaDueAt?: string | null;
+  completedAt?: string | null;
 };
+
+export type QuoteReadinessStatus = "ready" | "needs_information" | "requires_approval" | "blocked";
 
 export type QuoteReadinessEvaluation = {
   ready: boolean;
-  status: "ready" | "blocked";
+  status: QuoteReadinessStatus;
   blockers: QuoteReadinessBlocker[];
 };
 
@@ -90,6 +116,29 @@ const isCurrent = (price: ReadinessPrice, onDate: string, currencyCode?: string 
 
 const addBlocker = (blockers: QuoteReadinessBlocker[], blocker: QuoteReadinessBlocker) => {
   blockers.push(blocker);
+};
+
+const needsInformationCodes = new Set<QuoteReadinessBlockerCode>([
+  "missing_required_information",
+  "missing_price",
+  "missing_price_source",
+  "missing_unit_cost",
+  "unresolved_inventory",
+  "missing_commercial_calculation",
+  "discount_policy_not_evaluated",
+  "approval_outcome_missing",
+  "payment_terms_missing",
+  "sla_due_time_missing",
+  "completion_time_missing",
+]);
+
+const approvalCodes = new Set<QuoteReadinessBlockerCode>(["approval_pending"]);
+
+const statusFor = (blockers: QuoteReadinessBlocker[]): QuoteReadinessStatus => {
+  if (blockers.length === 0) return "ready";
+  if (blockers.some((blocker) => !needsInformationCodes.has(blocker.code) && !approvalCodes.has(blocker.code))) return "blocked";
+  if (blockers.some((blocker) => approvalCodes.has(blocker.code))) return "requires_approval";
+  return "needs_information";
 };
 
 const lineLabel = (line: ReadinessQuoteLine, index: number) => line.sku ?? line.productId ?? `line ${index + 1}`;
@@ -181,6 +230,18 @@ export const evaluateQuoteReadiness = (input: EvaluateQuoteReadinessInput): Quot
         productId: line.productId,
         message: currentPrice.reason ?? `A sellable price is required for ${label}.`,
       });
+    } else if (!currentPrice.sourceName || !currentPrice.sourceVersion) {
+      addBlocker(blockers, {
+        code: "missing_price_source",
+        productId: line.productId,
+        message: `Sourced price metadata is required for ${label}.`,
+      });
+    } else if (currentPrice.unitCost == null) {
+      addBlocker(blockers, {
+        code: "missing_unit_cost",
+        productId: line.productId,
+        message: `Unit cost is required for ${label} before commercial readiness can be confirmed.`,
+      });
     }
 
     const inventoryDecision = input.inventoryDecisions.find((decision) => decision.productId === line.productId);
@@ -205,11 +266,43 @@ export const evaluateQuoteReadiness = (input: EvaluateQuoteReadinessInput): Quot
     }
   });
 
-  if (!input.marginPolicy.passes) {
+  if (!input.commercialCalculation) {
+    addBlocker(blockers, {
+      code: "missing_commercial_calculation",
+      message: "Commercial calculation must be completed before quote readiness can be confirmed.",
+    });
+  }
+
+  if (!input.marginPolicy) {
+    addBlocker(blockers, {
+      code: "discount_policy_not_evaluated",
+      message: "Discount and margin policy evaluation must be completed before quote readiness can be confirmed.",
+    });
+  } else if (!input.marginPolicy.passes) {
     addBlocker(blockers, {
       code: "margin_policy_failed",
       message: `Projected margin of ${input.marginPolicy.grossMarginBps} bps is below the ${input.marginPolicy.floorBps} bps floor.`,
     });
+  }
+
+  if (!input.discountPolicyEvaluation) {
+    addBlocker(blockers, {
+      code: "approval_outcome_missing",
+      message: "Required approval outcome must be evaluated before quote readiness can be confirmed.",
+    });
+  } else if (input.discountPolicyEvaluation.blocked) {
+    addBlocker(blockers, {
+      code: "blocking_exception",
+      message: input.discountPolicyEvaluation.reason ?? "Approval policy blocks this quote.",
+    });
+  } else if (input.discountPolicyEvaluation.requiredRole) {
+    const matchingApproval = (input.approvals ?? []).find((approval) => approval.requiredRole === input.discountPolicyEvaluation?.requiredRole);
+    if (!matchingApproval) {
+      addBlocker(blockers, {
+        code: "approval_pending",
+        message: `${input.discountPolicyEvaluation.requiredRole} approval must be completed before a quote can be generated.`,
+      });
+    }
   }
 
   for (const approval of input.approvals ?? []) {
@@ -233,6 +326,22 @@ export const evaluateQuoteReadiness = (input: EvaluateQuoteReadinessInput): Quot
     });
   }
 
+  if (!input.slaDueAt) {
+    addBlocker(blockers, {
+      code: "sla_due_time_missing",
+      field: "slaDueAt",
+      message: "SLA due time must be populated before quote readiness can be confirmed.",
+    });
+  }
+
+  if (input.quoteStatus && terminalQuoteStatuses.includes(input.quoteStatus as (typeof terminalQuoteStatuses)[number]) && !input.completedAt) {
+    addBlocker(blockers, {
+      code: "completion_time_missing",
+      field: "completedAt",
+      message: `Completion time must be populated when quote reaches ${input.quoteStatus}.`,
+    });
+  }
+
   for (const exception of input.blockingExceptions ?? []) {
     if (exception.blocking && !exception.resolved) {
       addBlocker(blockers, {
@@ -243,9 +352,11 @@ export const evaluateQuoteReadiness = (input: EvaluateQuoteReadinessInput): Quot
     }
   }
 
+  const status = statusFor(blockers);
+
   return {
-    ready: blockers.length === 0,
-    status: blockers.length === 0 ? "ready" : "blocked",
+    ready: status === "ready",
+    status,
     blockers,
   };
 };
