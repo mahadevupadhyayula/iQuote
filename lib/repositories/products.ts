@@ -53,6 +53,25 @@ export const createProductsRepository = (client: RepositoryClient) => {
     return products.length === 1 ? products[0] : null;
   },
 
+  async listSubstitutes(productId: string) {
+    const product = await this.findById(productId);
+    if (!product) return [];
+
+    const { data, error } = await client
+      .from("products")
+      .select("*")
+      .eq("status", "active")
+      .or(`metadata->>replaces.eq.${product.sku},metadata->>replacement_for.eq.${product.sku}`)
+      .order("sku");
+    throwRepositoryError("List product substitutes", error);
+    return productRecordSchema.array().parse(data ?? []);
+  },
+
+  async findReplacement(productId: string) {
+    const substitutes = await this.listSubstitutes(productId);
+    return substitutes[0] ?? null;
+  },
+
   async addAlias(productId: string, alias: string, source = "manual") {
     const { data, error } = await client
       .from("product_aliases")
