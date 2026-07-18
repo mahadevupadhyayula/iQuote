@@ -29,6 +29,13 @@ The following are not allowed:
 - Production code must not provide a hardcoded OpenAI model fallback; missing `OPENAI_MODEL` must fail clearly in live extraction paths.
 - Tests must inject fake OpenAI clients and fake model names instead of relying on live OpenAI access or hardcoded production models.
 
+
+## Dependency Version Policy
+
+Use explicit caret ranges in `package.json` for application and development dependencies. Do not commit broad tags such as `latest`, `next`, `canary`, `beta`, or `*`.
+
+Dependency updates must keep the supported stack compatible: Next.js and `eslint-config-next` move together, React and `react-dom` stay on the same major version, and TypeScript, Tailwind CSS, Supabase, the OpenAI SDK, Vitest, and Playwright updates must be validated with the required checks before submission. Prefer focused dependency changes over unrelated upgrades.
+
 ## Required Checks
 
 Run these checks before submitting changes:

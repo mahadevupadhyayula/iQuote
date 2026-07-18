@@ -15,6 +15,13 @@ iQuote is a Next.js quote workflow demo backed by Supabase and OpenAI. It covers
 npm install
 ```
 
+
+## Dependency version policy
+
+This repository uses explicit caret ranges in `package.json` rather than broad tags such as `latest` or fully exact pins. Each dependency must declare a supported baseline version, and npm may resolve compatible non-breaking updates within that package's semver range.
+
+When updating dependencies, keep the framework and tooling stack aligned: Next.js and `eslint-config-next` should move together; React and `react-dom` should stay on the same major; TypeScript, Tailwind CSS, Supabase, the OpenAI SDK, Vitest, and Playwright should be updated only to versions verified by the required checks below. Do not introduce broad version tags (`latest`, `next`, `canary`, `beta`, or `*`) in committed manifests.
+
 ## Start Supabase
 
 Start the local Supabase stack:
