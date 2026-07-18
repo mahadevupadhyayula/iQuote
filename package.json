@@ -26,7 +26,8 @@
     "clsx": "latest",
     "lucide-react": "latest",
     "tailwind-merge": "latest",
-    "tailwindcss-animate": "latest"
+    "tailwindcss-animate": "latest",
+    "@supabase/supabase-js": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
