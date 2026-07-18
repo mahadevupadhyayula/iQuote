@@ -81,23 +81,36 @@ export type WorkflowServiceOptions = {
   now?: () => Date;
 };
 
-const findIdempotentEvent = async (workflowEventsRepository: WorkflowEventsRepository, quoteId: string, idempotencyKey: string) => {
-  const events = await workflowEventsRepository.listByQuote(quoteId);
-  return events.find((event: Awaited<ReturnType<WorkflowEventsRepository["listByQuote"]>>[number]) => event.payload.idempotency_key === idempotencyKey) ?? null;
+const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const normalizeLegacyPayload = (payload: Record<string, unknown>) => {
+  const { idempotency_key: _idempotencyKey, ...structuredPayload } = payload;
+  return structuredPayload;
 };
 
 export const createWorkflowService = ({ quotesRepository, workflowEventsRepository, now = () => new Date() }: WorkflowServiceOptions) => ({
   async transitionQuote({ quoteId, toStatus, actorId = null, payload = {}, idempotencyKey }: TransitionQuoteInput) {
-    if (idempotencyKey) {
-      const existingEvent = await findIdempotentEvent(workflowEventsRepository, quoteId, idempotencyKey);
-      if (existingEvent) {
-        const quote = await quotesRepository.findById(quoteId);
-        if (!quote) throw new Error(`Quote ${quoteId} was not found.`);
-        if (existingEvent.to_status !== toStatus) {
-          throw new WorkflowTransitionError(`Idempotency key ${idempotencyKey} was already used for transition to ${existingEvent.to_status}.`);
-        }
-        return { quote, event: existingEvent, idempotent: true };
+    const existingEvent = idempotencyKey ? await workflowEventsRepository.findByIdempotencyKey(quoteId, idempotencyKey) : null;
+    if (existingEvent) {
+      const quote = await quotesRepository.findById(quoteId);
+      if (!quote) throw new Error(`Quote ${quoteId} was not found.`);
+      if (
+        existingEvent.to_status !== toStatus ||
+        existingEvent.actor_id !== actorId ||
+        stableStringify(normalizeLegacyPayload(existingEvent.payload)) !== stableStringify(payload)
+      ) {
+        throw new WorkflowTransitionError(`Idempotency key ${idempotencyKey} was already used with different workflow event details.`);
       }
+      return { quote, event: existingEvent, idempotent: true };
     }
 
     const quote = await quotesRepository.findById(quoteId);
@@ -121,7 +134,8 @@ export const createWorkflowService = ({ quotesRepository, workflowEventsReposito
       actor_id: actorId,
       from_status: fromStatus,
       to_status: toStatus,
-      payload: { ...payload, ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) },
+      payload,
+      idempotency_key: idempotencyKey ?? null,
     });
 
     return { quote: updatedQuote, event, idempotent: false };
