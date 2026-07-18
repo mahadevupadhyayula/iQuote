@@ -2,10 +2,16 @@ import { z } from "zod";
 
 import { currencyCodeSchema, dateSchema } from "./shared-records";
 
+const sourceSpanSchema = z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative(), text: z.string().min(1).optional() }).strict();
+
+const confidenceSchema = z.number().min(0).max(1).optional();
+
 const extractedStringSchema = z
   .object({
     value: z.string().min(1).nullable(),
     missing: z.boolean(),
+    confidence: confidenceSchema,
+    source_span: sourceSpanSchema.nullable().optional(),
   })
   .strict()
   .superRefine((field, context) => {
@@ -18,6 +24,8 @@ const extractedNumberSchema = z
   .object({
     value: z.number().nullable(),
     missing: z.boolean(),
+    confidence: confidenceSchema,
+    source_span: sourceSpanSchema.nullable().optional(),
   })
   .strict()
   .superRefine((field, context) => {
@@ -30,6 +38,8 @@ const extractedDateSchema = z
   .object({
     value: dateSchema.nullable(),
     missing: z.boolean(),
+    confidence: confidenceSchema,
+    source_span: sourceSpanSchema.nullable().optional(),
   })
   .strict()
   .superRefine((field, context) => {
@@ -42,6 +52,8 @@ const extractedCurrencySchema = z
   .object({
     value: currencyCodeSchema.nullable(),
     missing: z.boolean(),
+    confidence: confidenceSchema,
+    source_span: sourceSpanSchema.nullable().optional(),
   })
   .strict()
   .superRefine((field, context) => {
@@ -54,6 +66,8 @@ const extractedEmailSchema = z
   .object({
     value: z.string().email().nullable(),
     missing: z.boolean(),
+    confidence: confidenceSchema,
+    source_span: sourceSpanSchema.nullable().optional(),
   })
   .strict()
   .superRefine((field, context) => {
@@ -84,6 +98,9 @@ export const extractionOutputSchema = z
     requested_valid_until: extractedDateSchema,
     lines: z.array(extractedQuoteLineSchema).min(1),
     missing_fields: z.array(z.string()).default([]),
+    clarification_questions: z.array(z.object({ field: z.string(), question: z.string().min(1) }).strict()).default([]),
+    source_spans: z.record(z.string(), sourceSpanSchema).default({}),
+    field_confidence: z.record(z.string(), z.number().min(0).max(1)).default({}),
   })
   .strict();
 

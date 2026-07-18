@@ -15,7 +15,14 @@ export type ProductAliasRecord = {
   created_at: string;
 };
 
-export const createProductsRepository = (client: RepositoryClient) => ({
+export const createProductsRepository = (client: RepositoryClient) => {
+  const findProductsByAlias = async (alias: string) => {
+    const { data, error } = await client.from("product_aliases").select("product:products(*)").ilike("alias", alias);
+    throwRepositoryError("Find products by alias", error);
+    return productRecordSchema.array().parse((data ?? []).map((row: { product?: unknown }) => row.product).filter(Boolean));
+  };
+
+  return {
   async findById(id: string) {
     const { data, error } = await client.from("products").select("*").eq("id", id).maybeSingle();
     throwRepositoryError("Find product by id", error);
@@ -39,10 +46,11 @@ export const createProductsRepository = (client: RepositoryClient) => ({
     return productRecordSchema.array().parse(data ?? []);
   },
 
+  findProductsByAlias,
+
   async findByAlias(alias: string) {
-    const { data, error } = await client.from("product_aliases").select("product:products(*)").ilike("alias", alias).limit(1).maybeSingle();
-    throwRepositoryError("Find product by alias", error);
-    return data?.product ? productRecordSchema.parse(data.product) : null;
+    const products = await findProductsByAlias(alias);
+    return products.length === 1 ? products[0] : null;
   },
 
   async addAlias(productId: string, alias: string, source = "manual") {
@@ -66,6 +74,7 @@ export const createProductsRepository = (client: RepositoryClient) => ({
     throwRepositoryError("Update product", error);
     return productRecordSchema.parse(data);
   },
-});
+  };
+};
 
 export type ProductsRepository = ReturnType<typeof createProductsRepository>;

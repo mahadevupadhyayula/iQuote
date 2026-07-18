@@ -12,8 +12,8 @@ type QuoteExtractionAdapterOptions = {
   useFallbackOnError?: boolean;
 };
 
-const nullableString = () => ({ value: null, missing: true });
-const nullableNumber = () => ({ value: null, missing: true });
+const nullableString = () => ({ value: null, missing: true, confidence: 0, source_span: null });
+const nullableNumber = () => ({ value: null, missing: true, confidence: 0, source_span: null });
 
 const buildFallbackExtraction = (sourceText: string): ExtractionOutput => ({
   source_text: sourceText,
@@ -26,7 +26,7 @@ const buildFallbackExtraction = (sourceText: string): ExtractionOutput => ({
     {
       line_number: 1,
       sku: nullableString(),
-      description: sourceText.trim() ? { value: sourceText.trim(), missing: false } : nullableString(),
+      description: sourceText.trim() ? { value: sourceText.trim(), missing: false, confidence: 0.5, source_span: { start: 0, end: sourceText.length, text: sourceText.trim() } } : nullableString(),
       quantity: nullableNumber(),
       requested_unit_price: nullableNumber(),
       needed_by: nullableString(),
@@ -34,12 +34,15 @@ const buildFallbackExtraction = (sourceText: string): ExtractionOutput => ({
     },
   ],
   missing_fields: ["customer_name", "customer_email", "opportunity_name", "currency_code", "requested_valid_until", "lines[0].sku", "lines[0].quantity", "lines[0].requested_unit_price", "lines[0].needed_by", "lines[0].notes"],
+  clarification_questions: [],
+  source_spans: {},
+  field_confidence: {},
 });
 
 const extractionJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["source_text", "customer_name", "customer_email", "opportunity_name", "currency_code", "requested_valid_until", "lines", "missing_fields"],
+  required: ["source_text", "customer_name", "customer_email", "opportunity_name", "currency_code", "requested_valid_until", "lines", "missing_fields", "clarification_questions", "source_spans", "field_confidence"],
   properties: {
     source_text: { type: "string" },
     customer_name: extractedStringJsonSchema(),
@@ -66,17 +69,26 @@ const extractionJsonSchema = {
       },
     },
     missing_fields: { type: "array", items: { type: "string" } },
+    clarification_questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["field", "question"], properties: { field: { type: "string" }, question: { type: "string" } } } },
+    source_spans: { type: "object", additionalProperties: sourceSpanJsonSchema() },
+    field_confidence: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: 1 } },
   },
 } as const;
+
+function sourceSpanJsonSchema() {
+  return { type: "object", additionalProperties: false, required: ["start", "end", "text"], properties: { start: { type: "integer", minimum: 0 }, end: { type: "integer", minimum: 0 }, text: { type: "string" } } } as const;
+}
 
 function extractedStringJsonSchema() {
   return {
     type: "object",
     additionalProperties: false,
-    required: ["value", "missing"],
+    required: ["value", "missing", "confidence", "source_span"],
     properties: {
       value: { type: ["string", "null"] },
       missing: { type: "boolean" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      source_span: { anyOf: [sourceSpanJsonSchema(), { type: "null" }] },
     },
   } as const;
 }
@@ -85,10 +97,12 @@ function extractedNumberJsonSchema() {
   return {
     type: "object",
     additionalProperties: false,
-    required: ["value", "missing"],
+    required: ["value", "missing", "confidence", "source_span"],
     properties: {
       value: { type: ["number", "null"] },
       missing: { type: "boolean" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      source_span: { anyOf: [sourceSpanJsonSchema(), { type: "null" }] },
     },
   } as const;
 }
@@ -125,7 +139,7 @@ export const createQuoteExtractionAdapter = (options: QuoteExtractionAdapterOpti
               content: [
                 {
                   type: "input_text",
-                  text: "Extract only quote-request facts explicitly present in the source. Represent every missing value as null with missing=true. Do not invent SKU, price, inventory, margin, approval, or workflow-status claims. Return no fields outside the schema.",
+                  text: "Extract only quote-request facts explicitly present in the source. Represent every missing value as null with missing=true. Do not invent SKU, price, inventory, margin, approval, or workflow-status claims. Include confidence scores and source spans only when supported by the source text; use confidence 0 and source_span null for missing fields. Return no fields outside the schema.",
                 },
               ],
             },
