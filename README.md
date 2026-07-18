@@ -84,6 +84,12 @@ This calls `POST /api/demo/reset`, which deletes and recreates the Atlas/Northst
 
 ## Tests and checks
 
+Run linting:
+
+```bash
+npm run lint
+```
+
 Run unit tests:
 
 ```bash

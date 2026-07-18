@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "db:migrate": "supabase db reset --no-seed",
@@ -50,6 +51,10 @@
     "postcss": "latest",
     "autoprefixer": "latest",
     "@playwright/test": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "typescript-eslint": "latest",
+    "eslint-config-prettier": "latest"
   }
 }
