@@ -25,7 +25,9 @@ The following are not allowed:
 - No LangChain or LangGraph.
 - No AI-generated pricing, discounts, inventory, approval status, quote totals, or commercial truth.
 - OpenAI calls must remain server-side.
-- The OpenAI model name must come from `OPENAI_MODEL`.
+- The OpenAI model name must come from `OPENAI_MODEL` through the server-side OpenAI configuration helper.
+- Production code must not provide a hardcoded OpenAI model fallback; missing `OPENAI_MODEL` must fail clearly in live extraction paths.
+- Tests must inject fake OpenAI clients and fake model names instead of relying on live OpenAI access or hardcoded production models.
 
 ## Required Checks
 
