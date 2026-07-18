@@ -32,10 +32,11 @@ The following are not allowed:
 Run these checks before submitting changes:
 
 - `npm run typecheck`
+- `npm run lint`
 - `npm run test:unit`
 - `npm run test:e2e`
 
-If a check cannot be run because of an environment limitation, document the limitation clearly.
+If a check cannot be run because of an environment limitation, document the limitation clearly. Run `npm run lint` with the other required checks to validate the Next.js and TypeScript ESLint configuration.
 
 ## PR Guidance
 
