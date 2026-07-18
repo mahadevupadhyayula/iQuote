@@ -1,4 +1,5 @@
 import type { InventoryAvailability } from "@/lib/domain/inventory";
+import type { ResolvedPrice } from "@/lib/rules/pricing-rules";
 
 export type AdapterUserRole = "sales_representative" | "sales_director" | "product_manager" | "finance" | "admin";
 
@@ -23,16 +24,21 @@ export type CrmAccount = {
   domain: string | null;
   billingEmail: string | null;
   phone: string | null;
+  sourceName: string;
+  sourceVersion: string;
 };
 
 export type CrmOpportunity = {
   id: string;
   accountId: string;
   name: string;
-  stage: "discovery" | "proposal" | "negotiation" | "closed_won" | "closed_lost";
+  externalId: string | null;
+  stage: "prospecting" | "qualification" | "proposal" | "negotiation" | "closed_won" | "closed_lost";
   ownerId: string;
   currencyCode: string;
   expectedCloseDate: string | null;
+  sourceName: string;
+  sourceVersion: string;
 };
 
 export type CrmAdapter = {
@@ -48,6 +54,8 @@ export type ErpInventoryLocationAvailability = {
   reorderPoint: number;
   availability: InventoryAvailability;
   asOf: string;
+  sourceName: string;
+  sourceVersion: string;
 };
 
 export type ErpInventoryAvailabilityResponse = {
@@ -59,6 +67,7 @@ export type ErpInventoryAvailabilityResponse = {
   totalAvailableQuantity: number;
   availability: InventoryAvailability;
   locations: ErpInventoryLocationAvailability[];
+  sources: { sourceName: string; sourceVersion: string; refreshedAt: string }[];
 };
 
 export type ErpInventoryAdapter = {
@@ -76,6 +85,17 @@ export type PricingSourceMetadata = {
 
 export type PricingSourceMetadataAdapter = {
   getMetadata(input?: { currencyCode?: string; onDate?: string }): Promise<PricingSourceMetadata>;
+};
+
+export type PricingAdapter = PricingSourceMetadataAdapter & {
+  resolvePrice(input: {
+    productId: string;
+    customerId: string;
+    customerTier?: string | null;
+    quantity: number;
+    currencyCode: string;
+    onDate?: string;
+  }): Promise<ResolvedPrice>;
 };
 
 export type NotificationMessage = {

@@ -60,6 +60,12 @@ values
   ('10000000-0000-4000-8000-000000000002', 'DEMO-CUST-NORTHSTAR', 'Northstar Mining', 'Northstar Mining Ltd.', 'northstar.example', 'procurement@northstar.example', '+1-406-555-0198', '{"line1":"88 Ore Ridge Road","city":"Billings","region":"MT","postalCode":"59101","country":"US"}', '{"line1":"12 Pit Access Road","city":"Butte","region":"MT","postalCode":"59701","country":"US"}', '{"demo_seed":"atlas-northstar-sterling","segment":"mining","customer_tier":"silver","demo_scenario":"split_inventory"}'),
   ('10000000-0000-4000-8000-000000000003', 'DEMO-CUST-STERLING', 'Sterling Works', 'Sterling Works LLC', 'sterling.example', 'quotes@sterling.example', '+1-713-555-0177', '{"line1":"701 Fabrication Loop","city":"Houston","region":"TX","postalCode":"77002","country":"US"}', '{"line1":"701 Fabrication Loop","city":"Houston","region":"TX","postalCode":"77002","country":"US"}', '{"demo_seed":"atlas-northstar-sterling","segment":"industrial_services","customer_tier":"standard","demo_scenario":"insufficient_inventory"}');
 
+insert into public.opportunities (id, customer_id, external_id, name, stage, expected_close_date, owner_id, currency_code, estimated_amount, metadata)
+values
+  ('60000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'DEMO-OPP-ATLAS-DALLAS', 'Dallas compressor replenishment', 'proposal', '2026-09-15', null, 'USD', 144000.00, '{"demo_seed":"atlas-northstar-sterling","source_name":"demo_crm_pipeline","source_version":"2026.07.18","demo_scenario":"straight_through"}'),
+  ('60000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 'DEMO-OPP-NORTHSTAR-BUTTE', 'Butte hydraulic pump replenishment', 'negotiation', '2026-09-30', null, 'USD', 126000.00, '{"demo_seed":"atlas-northstar-sterling","source_name":"demo_crm_pipeline","source_version":"2026.07.18","demo_scenario":"split_inventory"}'),
+  ('60000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003', 'DEMO-OPP-STERLING-INSTALL', 'Sterling installation package', 'qualification', '2026-10-15', null, 'USD', 48000.00, '{"demo_seed":"atlas-northstar-sterling","source_name":"demo_crm_pipeline","source_version":"2026.07.18","demo_scenario":"insufficient_inventory"}');
+
 insert into public.products (id, sku, name, description, status, unit_of_measure, metadata)
 values
   ('20000000-0000-4000-8000-000000000200', 'AX-200', 'AX-200 Industrial Compressor', 'Heavy-duty industrial compressor for automated production cells.', 'active', 'each', '{"demo_seed":"atlas-northstar-sterling","family":"compressors"}'),

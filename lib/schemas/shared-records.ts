@@ -26,6 +26,22 @@ export const customerRecordSchema = z.object({
   updated_at: timestampSchema,
 });
 
+
+export const opportunityRecordSchema = z.object({
+  id: uuidSchema,
+  customer_id: uuidSchema,
+  external_id: z.string().nullable(),
+  name: z.string().min(1),
+  stage: z.enum(["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]),
+  expected_close_date: dateSchema.nullable(),
+  owner_id: uuidSchema.nullable(),
+  currency_code: currencyCodeSchema,
+  estimated_amount: z.number().nonnegative(),
+  metadata: jsonObjectSchema,
+  created_at: timestampSchema,
+  updated_at: timestampSchema,
+});
+
 export const productRecordSchema = z.object({
   id: uuidSchema,
   sku: z.string().min(1),
@@ -45,6 +61,12 @@ export const priceRecordSchema = z.object({
   unit_price: z.number().nonnegative(),
   effective_from: dateSchema,
   effective_to: dateSchema.nullable(),
+  price_type: z.enum(["list", "customer_tier", "customer_specific"]).default("list"),
+  customer_tier: z.string().nullable().default(null),
+  customer_id: uuidSchema.nullable().default(null),
+  unit_cost: z.number().nonnegative().default(0),
+  source_name: z.string().min(1).default("manual"),
+  source_version: z.string().min(1).default("1"),
   created_at: timestampSchema,
 });
 
@@ -60,6 +82,9 @@ export const inventoryRecordSchema = z.preprocess((value) => {
   quantity_on_hand: z.number().nonnegative(),
   quantity_reserved: z.number().nonnegative(),
   reorder_point: z.number().nonnegative(),
+  source_name: z.string().min(1).default("manual"),
+  source_version: z.string().min(1).default("1"),
+  refreshed_at: timestampSchema.optional(),
   updated_at: timestampSchema,
 }));
 
@@ -146,6 +171,7 @@ export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type WorkflowEventRecord = z.infer<typeof workflowEventRecordSchema>;
 export type CustomerRecord = z.infer<typeof customerRecordSchema>;
 export type ProductRecord = z.infer<typeof productRecordSchema>;
+export type OpportunityRecord = z.infer<typeof opportunityRecordSchema>;
 export type PriceRecord = z.infer<typeof priceRecordSchema>;
 export type InventoryRecordRow = z.infer<typeof inventoryRecordSchema>;
 export type DiscountPolicyRecord = z.infer<typeof discountPolicyRecordSchema>;
