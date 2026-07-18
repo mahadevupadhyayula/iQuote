@@ -3,6 +3,7 @@ import type { QuoteStatus } from "./quote-statuses";
 export const workflowEventTypes = [
   "created",
   "updated",
+  "extraction_failed",
   "submitted_for_approval",
   "approval_requested",
   "approved",
