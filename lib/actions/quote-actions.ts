@@ -16,6 +16,7 @@ import { createProductMatchingService } from "@/lib/services/product-matching-se
 import { createWorkflowService } from "@/lib/services/workflow-service";
 import {
   applyRepCorrectionsActionSchema,
+  continueQuoteConfigurationActionSchema,
   createQuoteDraftActionSchema,
   extractAndBuildQuoteActionSchema,
   generateQuoteActionSchema,
@@ -24,6 +25,7 @@ import {
   sendQuoteActionSchema,
   submitQuoteForApprovalActionSchema,
   type ApplyRepCorrectionsActionInput,
+  type ContinueQuoteConfigurationActionInput,
   type CreateQuoteDraftActionInput,
   type ExtractAndBuildQuoteActionInput,
   type GenerateQuoteActionInput,
@@ -57,6 +59,44 @@ const recordUpdate = async (quote: QuoteRecord, actorId: string | null | undefin
     payload: { action, ...payload },
   });
 };
+
+
+const asObject = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
+
+const mergeQuoteMetadata = (current: Record<string, unknown>, updates: { metadata?: Record<string, unknown>; requirements?: Record<string, unknown>; clarification_answers?: Record<string, unknown>; product_candidates?: Record<string, unknown>; rep_confirmation?: Record<string, unknown>; original_request_text?: string }) => ({
+  ...current,
+  ...updates.metadata,
+  extraction: {
+    ...asObject(current.extraction),
+    ...(updates.original_request_text && !("original_request_text" in asObject(current.extraction)) ? { original_request_text: updates.original_request_text } : {}),
+  },
+  requirements: {
+    ...asObject(current.requirements),
+    ...updates.requirements,
+    ...(updates.clarification_answers ? { clarification_answers: updates.clarification_answers } : {}),
+  },
+  review: {
+    ...asObject(current.review),
+    ...(updates.product_candidates ? { product_candidates: updates.product_candidates } : {}),
+    ...(updates.rep_confirmation ? { rep_confirmation: updates.rep_confirmation } : {}),
+  },
+});
+
+const quoteSummary = (quote: QuoteRecord & { items?: QuoteItemRecord[] }) => ({
+  customer_id: quote.customer_id,
+  opportunity_id: quote.opportunity_id,
+  currency_code: quote.currency_code,
+  valid_until: quote.valid_until,
+  subtotal_amount: quote.subtotal_amount,
+  discount_amount: quote.discount_amount,
+  total_amount: quote.total_amount,
+  line_count: quote.items?.length ?? null,
+  metadata: {
+    extraction: asObject(quote.metadata.extraction),
+    requirements: asObject(quote.metadata.requirements),
+    review: asObject(quote.metadata.review),
+  },
+});
 
 const lineTotals = (lines: Pick<QuoteItemCreateInput, "quantity" | "unit_price" | "discount_bps">[]) => {
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
@@ -130,29 +170,39 @@ export async function extractAndBuildQuote(input: ExtractAndBuildQuoteActionInpu
     return toQuoteItems([{ product_id: match.product?.id ?? null, sku: match.product?.sku ?? extracted?.requested_sku.value ?? "UNMATCHED", description: match.product?.name ?? extracted?.raw_item_description.value ?? "Unmatched item", quantity: extracted?.quantity.value ?? 1, unit_price: price?.unit_price ?? 0, discount_bps: 0, metadata: { product_match: match } }])[0];
   }));
   const replaced = await repositories.quotes.replaceItems(data.quote_id, items);
-  const quote = await refreshQuoteAmounts(data.quote_id, replaced);
+  const refreshed = await refreshQuoteAmounts(data.quote_id, replaced);
+  const quote = await repositories.quotes.update(data.quote_id, { metadata: mergeQuoteMetadata(refreshed.metadata, { original_request_text: data.source_text }) });
   await recordUpdate(quote, data.actor_id, "extract_and_build_quote", { idempotency_key: data.idempotency_key, matched_lines: matches.length });
   revalidatePath(quotePath(data.quote_id));
   return { quote, extraction: result.extraction, matches, items: replaced };
 }
 
-export async function applyRepCorrections(input: ApplyRepCorrectionsActionInput) {
-  const data = applyRepCorrectionsActionSchema.parse(input);
+const persistRepCorrections = async (data: ApplyRepCorrectionsActionInput | SaveQuoteDraftActionInput, action: "apply_rep_corrections" | "save_quote_draft") => {
   const { repositories } = getContext();
-  const quote = await repositories.quotes.findById(data.quote_id);
-  if (!quote) throw new Error(`Quote ${data.quote_id} was not found.`);
+  const before = await repositories.quotes.findById(data.quote_id);
+  if (!before) throw new Error(`Quote ${data.quote_id} was not found.`);
   if (data.lines) await repositories.quotes.replaceItems(data.quote_id, toQuoteItems(data.lines));
   const latest = await repositories.quotes.findById(data.quote_id);
   if (!latest) throw new Error(`Quote ${data.quote_id} was not found after corrections.`);
   const totals = lineTotals(latest.items);
-  const updated = await repositories.quotes.update(data.quote_id, { customer_id: data.customer_id ?? quote.customer_id, opportunity_id: data.opportunity_id ?? quote.opportunity_id, currency_code: data.currency_code ?? quote.currency_code, valid_until: data.valid_until ?? quote.valid_until, subtotal_amount: totals.subtotal, discount_amount: totals.discount, total_amount: totals.total, metadata: { ...quote.metadata, ...data.metadata } });
-  const workflowService = createWorkflowService({ quotesRepository: repositories.quotes, workflowEventsRepository: repositories.workflowEvents });
-  const transitioned = updated.status === "needs_information"
-    ? (await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "configuring", actorId: data.actor_id ?? null, payload: { action: "apply_rep_corrections", line_count: latest.items.length } })).quote
-    : updated;
-  await recordUpdate(transitioned, data.actor_id, "apply_rep_corrections", { line_count: latest.items.length });
+  const updated = await repositories.quotes.update(data.quote_id, {
+    customer_id: "customer_id" in data && data.customer_id ? data.customer_id : before.customer_id,
+    opportunity_id: "opportunity_id" in data && data.opportunity_id !== undefined ? data.opportunity_id : before.opportunity_id,
+    currency_code: data.currency_code ?? before.currency_code,
+    valid_until: data.valid_until ?? before.valid_until,
+    subtotal_amount: totals.subtotal,
+    discount_amount: totals.discount,
+    total_amount: totals.total,
+    metadata: mergeQuoteMetadata(before.metadata, data),
+  });
+  const after = { ...updated, items: latest.items };
+  await recordUpdate(updated, data.actor_id, action, { before: quoteSummary(before), after: quoteSummary(after) });
   revalidatePath(quotePath(data.quote_id));
-  return transitioned;
+  return updated;
+};
+
+export async function applyRepCorrections(input: ApplyRepCorrectionsActionInput) {
+  return persistRepCorrections(applyRepCorrectionsActionSchema.parse(input), "apply_rep_corrections");
 }
 
 export async function selectFulfillment(input: SelectFulfillmentActionInput) {
@@ -220,6 +270,13 @@ export async function sendQuote(input: SendQuoteActionInput) {
 }
 
 export async function saveQuoteDraft(input: SaveQuoteDraftActionInput) {
-  const data = saveQuoteDraftActionSchema.parse(input);
-  return applyRepCorrections({ quote_id: data.quote_id, actor_id: data.actor_id, currency_code: data.currency_code, valid_until: data.valid_until, lines: data.lines, metadata: data.metadata });
+  return persistRepCorrections(saveQuoteDraftActionSchema.parse(input), "save_quote_draft");
+}
+
+export async function continueQuoteConfiguration(input: ContinueQuoteConfigurationActionInput) {
+  const data = continueQuoteConfigurationActionSchema.parse(input);
+  const { workflowService } = getContext();
+  const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "configuring", actorId: data.actor_id ?? null, payload: { action: "continue_quote_configuration" }, idempotencyKey: data.idempotency_key });
+  revalidatePath(quotePath(data.quote_id));
+  return result.quote;
 }

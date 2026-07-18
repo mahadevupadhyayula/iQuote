@@ -2,6 +2,7 @@
 
 export {
   applyRepCorrections,
+  continueQuoteConfiguration,
   createQuoteDraft,
   extractAndBuildQuote,
   generateQuote,
