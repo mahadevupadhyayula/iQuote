@@ -10,6 +10,7 @@ import { createWorkflowService } from "@/lib/services/workflow-service";
 
 const money = (amount: number) => Math.round(amount * 100) / 100;
 const quotePath = (quoteId: string) => `/quotes/${quoteId}`;
+const hasIdempotencyKey = (payload: Record<string, unknown>, key?: string) => Boolean(key && payload.idempotency_key === key);
 const approvalPath = (approvalId: string) => `/approvals/${approvalId}`;
 
 const getContext = () => {
@@ -51,11 +52,18 @@ export async function decideApproval(input: DecideApprovalActionInput) {
   const approval = approvals.find((record) => record.id === data.approval_id);
 
   if (!approval) throw new Error(`Approval ${data.approval_id} was not found for quote ${data.quote_id}.`);
-  if (approval.status !== "pending") throw new Error(`Approval ${data.approval_id} has already been ${approval.status}.`);
 
   const quote = await repositories.quotes.findById(data.quote_id);
   if (!quote) throw new Error(`Quote ${data.quote_id} was not found.`);
-  if (quote.status !== "pending_approval") throw new Error(`Quote ${data.quote_id} is ${quote.status} and is not pending approval.`);
+
+  if (approval.status !== "pending" || quote.status !== "pending_approval") {
+    const existingEvent = data.idempotency_key
+      ? (await repositories.workflowEvents.listByQuote(data.quote_id)).find((event) => hasIdempotencyKey(event.payload, data.idempotency_key))
+      : null;
+    if (existingEvent) return { approval, quote, pendingApprovals: approvals.filter((record) => record.status === "pending") };
+    if (approval.status !== "pending") throw new Error(`Approval ${data.approval_id} has already been ${approval.status}.`);
+    throw new Error(`Quote ${data.quote_id} is ${quote.status} and is not pending approval.`);
+  }
 
   let updatedQuote = quote;
   if (data.decision === "approve_with_modified_discount") {

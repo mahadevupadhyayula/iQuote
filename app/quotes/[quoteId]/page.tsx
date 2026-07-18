@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Clock3, FileText, PackageCheck, Settings2 } from "lucide-react";
+import { AlertTriangle, BadgePercent, CheckCircle2, Clock3, FileQuestion, FileText, PackageCheck, Settings2, ShieldAlert, Tags } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,34 @@ const currency = (amount: number, code = "USD") => new Intl.NumberFormat("en-US"
 const percent = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
 const shortDate = (value: string | null) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "Not set";
 const relativeMinutes = (minutes: number | null) => minutes == null ? "No SLA" : minutes < 0 ? `${Math.abs(minutes)}m breached` : minutes > 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m left` : `${minutes}m left`;
+
+
+const exceptionGroups = [
+  { key: "discount", title: "Discount", icon: BadgePercent, codes: ["margin_policy_failed", "approval_pending", "approval_rejected"], empty: "Discount and margin are within policy." },
+  { key: "missing", title: "Missing information", icon: FileQuestion, codes: ["missing_required_information", "payment_terms_missing"], empty: "Required quote information is complete." },
+  { key: "pricing", title: "Pricing", icon: Tags, codes: ["missing_price", "stale_price", "pricing_exception"], empty: "Pricing is current and sellable." },
+  { key: "inventory", title: "Inventory", icon: PackageCheck, codes: ["unresolved_inventory", "stale_inventory"], empty: "Inventory has been resolved." },
+  { key: "product", title: "Product validity", icon: ShieldAlert, codes: ["invalid_product", "blocking_exception"], empty: "Products are active and valid." },
+] as const;
+
+function ExceptionCards({ quote }: { quote: InternalQuoteWorkspaceViewModel }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      {exceptionGroups.map((group) => {
+        const Icon = group.icon;
+        const blockers = quote.readiness.blockers.filter((blocker) => (group.codes as readonly string[]).includes(blocker.code));
+        return (
+          <Card key={group.key} className={blockers.length > 0 ? "border-amber-200 bg-amber-50/60" : "bg-white"}>
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Icon className={blockers.length > 0 ? "h-4 w-4 text-amber-600" : "h-4 w-4 text-emerald-600"} /> {group.title}</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-xs">
+              {blockers.length > 0 ? blockers.map((blocker, index) => <p key={`${blocker.code}-${index}`} className="text-amber-900">{blocker.message}</p>) : <p className="text-slate-500">{group.empty}</p>}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 function RequirementsCard({ quote }: { quote: InternalQuoteWorkspaceViewModel }) {
   const address = quote.customer?.shipping_address as Record<string, unknown> | undefined;
@@ -37,7 +66,8 @@ function InventoryRecommendation({ quote }: { quote: InternalQuoteWorkspaceViewM
 
 function ReadinessPanel({ quote }: { quote: InternalQuoteWorkspaceViewModel }) {
   const checks = quote.readiness.ready ? ["Requirements complete", "Product configuration valid", "Pricing current", "Inventory resolved", "Margin within policy", "Terms accepted"] : quote.readiness.blockers.map((b) => b.message);
-  return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><CheckCircle2 className="h-5 w-5 text-blue-600" /> Quote Readiness</CardTitle></CardHeader><CardContent className="space-y-3">{checks.map((check, index) => <div key={index} className="flex gap-2 text-sm"><CheckCircle2 className={`h-5 w-5 ${quote.readiness.ready ? "text-emerald-600" : "text-amber-600"}`} /><span>{check}</span></div>)}</CardContent></Card>;
+  const pendingApprovals = quote.approvalStatus.approvals.filter((approval) => approval.status === "pending");
+  return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><CheckCircle2 className="h-5 w-5 text-blue-600" /> Quote Readiness</CardTitle></CardHeader><CardContent className="space-y-3">{checks.map((check, index) => <div key={index} className="flex gap-2 text-sm"><CheckCircle2 className={`h-5 w-5 ${quote.readiness.ready ? "text-emerald-600" : "text-amber-600"}`} /><span>{check}</span></div>)}{pendingApprovals.map((approval) => <Link key={approval.id} href={`/approvals/${approval.id}`} className="block rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">Open {approval.required_role.replaceAll("_", " ")} approval</Link>)}</CardContent></Card>;
 }
 
 function SummaryAndSla({ quote }: { quote: InternalQuoteWorkspaceViewModel }) {
@@ -53,5 +83,5 @@ export default async function QuoteWorkspacePage({ params }: { params: Promise<{
   const repositories = createRepositories(createServerSupabaseClient());
   const quote = await createQuoteWorkspaceQueryService(repositories).getInternalWorkspace(quoteId);
   if (!quote) notFound();
-  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950"><div className="mx-auto max-w-[1500px] space-y-6"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">Intelligent Quote Workspace</p><h1 className="text-3xl font-bold">{quote.quoteNumber}</h1><p className="text-slate-600">Three-column workspace for resolving exceptions and generating customer-ready quotes.</p></div><Badge className="bg-white text-sm text-slate-700">{quote.status.replaceAll("_", " ")}</Badge></header><section className="grid gap-5 lg:grid-cols-[330px_minmax(0,1fr)_350px]"><aside className="space-y-5"><RequirementsCard quote={quote} /><Card><CardHeader><CardTitle>Corrections</CardTitle></CardHeader><CardContent><CorrectionForm quote={quote} /></CardContent></Card></aside><section className="space-y-5"><QuoteConfigurationTable quote={quote} /><InventoryRecommendation quote={quote} /><ActivityTimeline quote={quote} /></section><aside className="space-y-5"><ReadinessPanel quote={quote} /><SummaryAndSla quote={quote} /><Card><CardHeader><CardTitle>Actions</CardTitle></CardHeader><CardContent><QuoteWorkflowActions quote={quote} /></CardContent></Card></aside></section></div></main>;
+  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950"><div className="mx-auto max-w-[1500px] space-y-6"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">Intelligent Quote Workspace</p><h1 className="text-3xl font-bold">{quote.quoteNumber}</h1><p className="text-slate-600">Three-column workspace for resolving exceptions and generating customer-ready quotes.</p></div><Badge className="bg-white text-sm text-slate-700">{quote.status.replaceAll("_", " ")}</Badge></header><ExceptionCards quote={quote} /><section className="grid gap-5 lg:grid-cols-[330px_minmax(0,1fr)_350px]"><aside className="space-y-5"><RequirementsCard quote={quote} /><Card><CardHeader><CardTitle>Corrections</CardTitle></CardHeader><CardContent><CorrectionForm quote={quote} /></CardContent></Card></aside><section className="space-y-5"><QuoteConfigurationTable quote={quote} /><InventoryRecommendation quote={quote} /><ActivityTimeline quote={quote} /></section><aside className="space-y-5"><ReadinessPanel quote={quote} /><SummaryAndSla quote={quote} /><Card><CardHeader><CardTitle>Actions</CardTitle></CardHeader><CardContent><QuoteWorkflowActions quote={quote} /></CardContent></Card></aside></section></div></main>;
 }
