@@ -51,6 +51,17 @@ const shortDate = (value: string | null) =>
         year: "numeric",
       }).format(new Date(value))
     : "Not set";
+
+const shortDateTime = (value: string | null) =>
+  value
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(value))
+    : "Not set";
 const relativeMinutes = (minutes: number | null) =>
   minutes == null
     ? "No SLA"
@@ -391,9 +402,11 @@ function SummaryAndSla({ quote }: { quote: InternalQuoteWorkspaceViewModel }) {
           >
             {relativeMinutes(quote.sla.minutesRemaining)}
           </p>
-          <p className="text-sm text-slate-500">
-            Due {shortDate(quote.sla.dueAt)}
-          </p>
+          <div className="mt-3 space-y-1 text-sm text-slate-500">
+            <p>Started {shortDateTime(quote.sla.startedAt)}</p>
+            <p>Due {shortDateTime(quote.sla.dueAt)}</p>
+            <p>Policy {quote.sla.policyMinutes ?? "Not set"} minutes</p>
+          </div>
         </CardContent>
       </Card>
     </>

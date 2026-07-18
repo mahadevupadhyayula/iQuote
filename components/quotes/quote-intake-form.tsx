@@ -424,6 +424,15 @@ function Field({
   );
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function ResultPanel({ result }: { result: IntakeActionState }) {
   if (!result.ok)
     return (
@@ -442,7 +451,10 @@ function ResultPanel({ result }: { result: IntakeActionState }) {
         {result.extractionStatus === "completed"
           ? "ready for review"
           : "in manual fallback"}
-        .{" "}
+        .
+        <span className="mt-2 block text-xs text-slate-600">
+          SLA started {formatDateTime(result.slaStartedAt)} and is due {formatDateTime(result.slaDueAt)}.
+        </span>{" "}
         <Link
           className="font-semibold text-blue-700 underline"
           href={`/quotes/${result.quoteId}`}
