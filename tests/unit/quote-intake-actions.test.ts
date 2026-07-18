@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/server", () => ({ createServerSupabaseClient: vi.fn(() => ({})) }));
@@ -6,7 +6,7 @@ vi.mock("@/lib/db/server", () => ({ createServerSupabaseClient: vi.fn(() => ({})
 const state = vi.hoisted(() => {
   const timestamp = "2026-07-18T12:00:00.000Z";
   const customer = { id: "22222222-2222-4222-8222-222222222222", external_id: "buyer@example.com", name: "Atlas", legal_name: null, domain: null, billing_email: "buyer@example.com", phone: null, billing_address: {}, shipping_address: {}, metadata: {}, created_at: timestamp, updated_at: timestamp };
-  const quote = { id: "11111111-1111-4111-8111-111111111111", opportunity_id: null, customer_id: customer.id, quote_number: "Q-1000", status: "draft", currency_code: "USD", subtotal_amount: 0, discount_amount: 0, tax_amount: 0, total_amount: 0, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, metadata: {}, created_at: timestamp, updated_at: timestamp, items: [] };
+  const quote = { id: "11111111-1111-4111-8111-111111111111", opportunity_id: null, customer_id: customer.id, quote_number: "Q-1000", status: "draft", currency_code: "USD", subtotal_amount: 0, discount_amount: 0, tax_amount: 0, total_amount: 0, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, sla_due_at: null, metadata: {}, created_at: timestamp, updated_at: timestamp, items: [] };
   return { timestamp, customer, quote: { ...quote }, baseQuote: quote, events: [] as Record<string, unknown>[] };
 });
 
@@ -25,7 +25,12 @@ vi.mock("@/lib/adapters/ai/quote-extraction-adapter", () => ({
 import { submitQuoteIntake } from "@/app/quotes/new/actions";
 
 describe("submitQuoteIntake manual fallback", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(state.timestamp));
     vi.clearAllMocks();
     state.events.length = 0;
     state.quote = { ...state.baseQuote, metadata: {}, items: [] };
@@ -64,6 +69,9 @@ describe("submitQuoteIntake manual fallback", () => {
       manualFallbackState: { enabled: true, reason: "extraction_failed", category: "timeout" },
     });
     expect(JSON.stringify(result)).not.toContain("sk-secret");
+    expect(result).toMatchObject({ slaStartedAt: "2026-07-18T12:00:00.000Z", slaDueAt: "2026-07-18T12:15:00.000Z" });
+    expect(state.quote.sla_due_at).toBe("2026-07-18T12:15:00.000Z");
+    expect(state.quote.metadata.sla).toMatchObject({ started_at: "2026-07-18T12:00:00.000Z", due_at: "2026-07-18T12:15:00.000Z", policy_minutes: 15 });
     expect(state.quote.metadata.manual_entry).toMatchObject({ enabled: true, failure_category: "timeout" });
   });
 });

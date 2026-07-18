@@ -85,10 +85,12 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
     approvals: InternalApprovalViewModel[];
   };
   sla: {
+    startedAt: string | null;
     dueAt: string | null;
+    policyMinutes: number | null;
     breached: boolean;
     minutesRemaining: number | null;
-    source: "metadata" | "valid_until" | "none";
+    source: "metadata" | "column" | "valid_until" | "none";
   };
   workflowEvents: WorkflowEventRecord[];
   internalNotes: unknown;
@@ -185,11 +187,22 @@ const approvalStatus = (approvals: ApprovalRecord[]): InternalQuoteWorkspaceView
 };
 
 const sla = (quote: QuoteWithItems, now: Date): InternalQuoteWorkspaceViewModel["sla"] => {
-  const dueAt = metadataString(quote.metadata, "sla_due_at");
-  const source = dueAt ? "metadata" : quote.valid_until ? "valid_until" : "none";
-  const effectiveDueAt = dueAt ?? (quote.valid_until ? `${quote.valid_until}T23:59:59.999Z` : null);
+  const slaMetadata = metadataObject(quote.metadata.sla);
+  const metadataStartedAt = metadataString(slaMetadata, "started_at") ?? metadataString(quote.metadata, "sla_started_at");
+  const metadataDueAt = metadataString(slaMetadata, "due_at") ?? metadataString(quote.metadata, "sla_due_at");
+  const policyMinutes = metadataNumber(slaMetadata, "policy_minutes", metadataNumber(quote.metadata, "sla_policy_minutes", Number.NaN));
+  const columnDueAt = quote.sla_due_at;
+  const source = metadataDueAt ? "metadata" : columnDueAt ? "column" : quote.valid_until ? "valid_until" : "none";
+  const effectiveDueAt = metadataDueAt ?? columnDueAt ?? (quote.valid_until ? `${quote.valid_until}T23:59:59.999Z` : null);
   const minutesRemaining = effectiveDueAt ? Math.floor((new Date(effectiveDueAt).getTime() - now.getTime()) / 60_000) : null;
-  return { dueAt: effectiveDueAt, breached: minutesRemaining != null && minutesRemaining < 0, minutesRemaining, source };
+  return {
+    startedAt: metadataStartedAt,
+    dueAt: effectiveDueAt,
+    policyMinutes: Number.isFinite(policyMinutes) ? policyMinutes : null,
+    breached: minutesRemaining != null && minutesRemaining < 0,
+    minutesRemaining,
+    source,
+  };
 };
 
 export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQueryRepositories, now = () => new Date()) => ({

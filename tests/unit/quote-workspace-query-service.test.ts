@@ -26,10 +26,11 @@ const quote: QuoteWithItems = {
   approved_at: null,
   sent_at: null,
   accepted_at: null,
+  sla_due_at: "2026-07-19T12:00:00.000Z",
   metadata: {
     internal_notes: "Rep-only note",
     margin_floor_bps: 3000,
-    sla_due_at: "2026-07-19T12:00:00.000Z",
+    sla: { started_at: "2026-07-18T12:00:00.000Z", due_at: "2026-07-19T12:00:00.000Z", policy_minutes: 1440 },
     payment_terms: { accepted: true, termsCode: "NET30" },
   },
   created_at: timestamp,
@@ -102,9 +103,19 @@ describe("quote workspace query service", () => {
     expect(view?.readiness.status).toBe("blocked");
     expect(view?.margin).toMatchObject({ costAmount: 550, grossProfitAmount: 350, grossMarginBps: 3889, floorBps: 3000, floorPasses: true });
     expect(view?.approvalStatus).toMatchObject({ status: "pending", pendingCount: 1, requiredRoles: ["sales_director"] });
-    expect(view?.sla).toMatchObject({ dueAt: "2026-07-19T12:00:00.000Z", breached: false, minutesRemaining: 1440, source: "metadata" });
+    expect(view?.sla).toMatchObject({ startedAt: "2026-07-18T12:00:00.000Z", dueAt: "2026-07-19T12:00:00.000Z", policyMinutes: 1440, breached: false, minutesRemaining: 1440, source: "metadata" });
     expect(view?.workflowEvents).toHaveLength(1);
     expect(view?.lines[0]).toMatchObject({ unitCost: 275, lineCost: 550, grossProfit: 350, grossMarginBps: 3889, internalNotes: "Line-only note" });
     expect(view?.internalNotes).toBe("Rep-only note");
   });
+
+  it("falls back to the explicit SLA due column when nested metadata does not provide a due time", async () => {
+    const columnQuote = { ...quote, metadata: { margin_floor_bps: 3000, payment_terms: { accepted: true, termsCode: "NET30" } } };
+    const columnRepositories = { ...repositories, quotes: { findById: vi.fn(async () => columnQuote) } };
+
+    const view = await createQuoteWorkspaceQueryService(columnRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
+
+    expect(view?.sla).toMatchObject({ startedAt: null, dueAt: "2026-07-19T12:00:00.000Z", policyMinutes: null, breached: false, minutesRemaining: 1440, source: "column" });
+  });
+
 });

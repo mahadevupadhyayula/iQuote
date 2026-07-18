@@ -52,7 +52,7 @@ const optionalString = (value: string | undefined) => (value && value.length > 0
 
 const buildSla = (now = new Date()) => {
   const due = new Date(now.getTime() + intakeSlaMinutes * 60 * 1000);
-  return { startedAt: now.toISOString(), dueAt: due.toISOString() };
+  return { startedAt: now.toISOString(), dueAt: due.toISOString(), policyMinutes: intakeSlaMinutes };
 };
 
 export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<IntakeActionState> {
@@ -91,6 +91,7 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
       approved_at: null,
       sent_at: null,
       accepted_at: null,
+      sla_due_at: sla.dueAt,
       metadata: {
         opportunity_name: optionalString(data.opportunityName),
         intake: {
@@ -98,8 +99,11 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
           attachment_v1: data.attachmentName ? { file_name: data.attachmentName, status: "metadata_only" } : null,
         },
         seeded_scenario: data.seededScenarioId ? { id: data.seededScenarioId, selected_at: sla.startedAt } : null,
-        sla_started_at: sla.startedAt,
-        sla_due_at: sla.dueAt,
+        sla: {
+          started_at: sla.startedAt,
+          due_at: sla.dueAt,
+          policy_minutes: sla.policyMinutes,
+        },
       },
     });
 
@@ -109,7 +113,7 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
       actor_id: null,
       from_status: null,
       to_status: "draft",
-      payload: { action: "quote_intake_created", sla_started_at: sla.startedAt, sla_due_at: sla.dueAt },
+      payload: { action: "quote_intake_created", sla: { started_at: sla.startedAt, due_at: sla.dueAt, policy_minutes: sla.policyMinutes } },
     });
 
     await workflowService.transitionQuote({ quoteId: quote.id, toStatus: "extracting", payload: { action: "quote_extraction_started" } });

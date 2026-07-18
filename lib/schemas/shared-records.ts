@@ -122,6 +122,7 @@ export const quoteRecordSchema = z.object({
   approved_at: timestampSchema.nullable(),
   sent_at: timestampSchema.nullable(),
   accepted_at: timestampSchema.nullable(),
+  sla_due_at: timestampSchema.nullable().default(null),
   metadata: jsonObjectSchema,
   created_at: timestampSchema,
   updated_at: timestampSchema,
