@@ -72,12 +72,27 @@ describe("createProductMatchingService", () => {
 
   it("rejects invalid AI ranking responses and out-of-list product ids as ambiguous", async () => {
     const candidate = product();
-    const invalidClient = mockClient({ output_text: JSON.stringify({ product_id: candidate.id, confidence: 2, reason: "invalid" }) });
     const productsRepository = repository({ search: vi.fn(async () => [candidate, product({ id: "10000000-0000-4000-8000-000000000002", sku: "BX-200" })]) });
+    const invalidClient = mockClient({ output_text: JSON.stringify({ product_id: candidate.id, confidence: 2, reason: "invalid" }) });
 
     await expect(createProductMatchingService({ productsRepository, client: invalidClient, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" })).resolves.toMatchObject({ product: null, ambiguous: true, requiresRepConfirmation: true });
 
+    const malformedClient = mockClient({ output_text: "not json" });
+    await expect(createProductMatchingService({ productsRepository, client: malformedClient, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" })).resolves.toMatchObject({ product: null, confidence: 0, ambiguous: true, requiresRepConfirmation: true });
+
     const outsideClient = mockClient({ output_text: JSON.stringify({ product_id: "10000000-0000-4000-8000-000000000099", confidence: 0.95, reason: "Looks close." }) });
     await expect(createProductMatchingService({ productsRepository, client: outsideClient, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" })).resolves.toMatchObject({ product: null, ambiguous: true, requiresRepConfirmation: true, reason: expect.stringContaining("not in the supplied candidate list") });
+  });
+
+  it("treats low-confidence or explicitly ambiguous model suggestions as unmatched", async () => {
+    const candidate = product();
+    const otherCandidate = product({ id: "10000000-0000-4000-8000-000000000002", sku: "BX-200" });
+    const productsRepository = repository({ search: vi.fn(async () => [candidate, otherCandidate]) });
+    const lowConfidenceClient = mockClient({ output_text: JSON.stringify({ product_id: candidate.id, confidence: 0.7, reason: "Weak text fit." }) });
+
+    await expect(createProductMatchingService({ productsRepository, client: lowConfidenceClient, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" })).resolves.toMatchObject({ product: null, confidence: 0.7, ambiguous: true, requiresRepConfirmation: true, reason: "Weak text fit." });
+
+    const ambiguousClient = mockClient({ output_text: JSON.stringify({ product_id: candidate.id, confidence: 0.95, reason: "Multiple candidates fit.", ambiguous: true }) });
+    await expect(createProductMatchingService({ productsRepository, client: ambiguousClient, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" })).resolves.toMatchObject({ product: null, confidence: 0.95, ambiguous: true, requiresRepConfirmation: true, reason: "Multiple candidates fit." });
   });
 });
