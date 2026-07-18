@@ -20,7 +20,9 @@ type PublicEnums = {
   product_status: "active" | "inactive" | "discontinued";
   quote_status:
     | "draft"
+    | "extracting"
     | "needs_information"
+    | "configuring"
     | "pending_approval"
     | "approved"
     | "sent"
@@ -31,6 +33,8 @@ type PublicEnums = {
   workflow_event_type:
     | "created"
     | "updated"
+    | "extraction_started"
+    | "extraction_completed"
     | "extraction_failed"
     | "submitted_for_approval"
     | "approval_requested"

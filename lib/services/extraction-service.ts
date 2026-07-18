@@ -19,6 +19,8 @@ export type ExtractQuoteInput = {
   actorId?: string | null;
 };
 
+const configuringStatus: QuoteStatus = "configuring";
+const extractingStatus: QuoteStatus = "extracting";
 const needsInformationStatus: QuoteStatus = "needs_information";
 
 const buildClarificationQuestions = (missingFields: string[]) =>
@@ -58,6 +60,11 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
     const quote = await quotesRepository.findById(quoteId);
     if (!quote) throw new Error(`Quote ${quoteId} was not found.`);
 
+    const workflowService = createWorkflowService({ quotesRepository, workflowEventsRepository });
+    const extractingQuote = quote.status === "draft"
+      ? (await workflowService.transitionQuote({ quoteId, toStatus: extractingStatus, actorId, payload: { action: "quote_extraction_started" } })).quote
+      : quote;
+
     try {
       const extraction = extractionOutputSchema.parse(await extractionAdapter.extractQuoteRequest(sourceText));
       const clarificationQuestions = extraction.clarification_questions.length > 0 ? extraction.clarification_questions : buildClarificationQuestions(extraction.missing_fields);
@@ -67,28 +74,28 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
         currency_code: extraction.currency_code.value ?? quote.currency_code,
         valid_until: extraction.requested_valid_until.value ?? quote.valid_until,
         metadata: {
-          ...quote.metadata,
+          ...extractingQuote.metadata,
           extraction: { ...toStoredExtraction(normalizedExtraction), status: "completed" },
           manual_entry: { enabled: extraction.missing_fields.length > 0, reason: extraction.missing_fields.length > 0 ? "missing_extracted_fields" : null },
         },
       });
 
-      await workflowEventsRepository.record({
-        quote_id: quoteId,
-        event_type: "updated",
-        actor_id: actorId,
-        from_status: quote.status,
-        to_status: updatedQuote.status,
-        payload: { action: "quote_extraction_completed", missing_fields: extraction.missing_fields, clarification_questions: clarificationQuestions },
-      });
+      const targetStatus = extraction.missing_fields.length > 0 ? needsInformationStatus : configuringStatus;
+      const transitioned = updatedQuote.status === targetStatus
+        ? updatedQuote
+        : (await workflowService.transitionQuote({
+            quoteId,
+            toStatus: targetStatus,
+            actorId,
+            payload: { action: "quote_extraction_completed", missing_fields: extraction.missing_fields, clarification_questions: clarificationQuestions },
+          })).quote;
 
-      return { quote: updatedQuote, extraction: normalizedExtraction };
+      return { quote: transitioned, extraction: normalizedExtraction };
     } catch (error) {
       await quotesRepository.update(quoteId, {
-        metadata: enableManualEntryMetadata(quote.metadata, "openai_extraction_failed_or_invalid", error),
+        metadata: enableManualEntryMetadata(extractingQuote.metadata, "openai_extraction_failed_or_invalid", error),
       });
 
-      const workflowService = createWorkflowService({ quotesRepository, workflowEventsRepository });
       const { quote: updatedQuote } = await workflowService.transitionQuote({
         quoteId,
         toStatus: needsInformationStatus,
