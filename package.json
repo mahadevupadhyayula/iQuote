@@ -27,7 +27,8 @@
     "lucide-react": "latest",
     "tailwind-merge": "latest",
     "tailwindcss-animate": "latest",
-    "@supabase/supabase-js": "latest"
+    "@supabase/supabase-js": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
