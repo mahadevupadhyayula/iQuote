@@ -84,6 +84,44 @@ describe("createQuoteExtractionAdapter", () => {
     await expect(adapter.extractQuoteRequest("Need a quote.")).rejects.toThrow();
   });
 
+  it("propagates malformed JSON errors to the extraction service", async () => {
+    const adapter = createQuoteExtractionAdapter({ client: mockClient({ output_text: "not-json" }), model: "gpt-test" });
+
+    await expect(adapter.extractQuoteRequest("Need a quote.")).rejects.toThrow(SyntaxError);
+  });
+
+  it("propagates missing structured output errors to the extraction service", async () => {
+    const adapter = createQuoteExtractionAdapter({ client: mockClient({ output: [] }), model: "gpt-test" });
+
+    await expect(adapter.extractQuoteRequest("Need a quote.")).rejects.toThrow("OpenAI response did not include structured output text.");
+  });
+
+  it("propagates schema violation errors to the extraction service", async () => {
+    const adapter = createQuoteExtractionAdapter({
+      client: mockClient({
+        output_text: JSON.stringify({
+          source_text: "Need a quote.",
+          customer_name: { value: null, missing: false, confidence: 0, source_span: null },
+        }),
+      }),
+      model: "gpt-test",
+    });
+
+    await expect(adapter.extractQuoteRequest("Need a quote.")).rejects.toThrow();
+  });
+
+  it("propagates timeout errors to the extraction service", async () => {
+    const timeoutError = new Error("OpenAI request timed out");
+    const client = {
+      responses: {
+        create: vi.fn().mockRejectedValue(timeoutError),
+      },
+    } as unknown as OpenAIResponsesClient;
+    const adapter = createQuoteExtractionAdapter({ client, model: "gpt-test" });
+
+    await expect(adapter.extractQuoteRequest("Need a quote.")).rejects.toBe(timeoutError);
+  });
+
   it("falls back to a conservative null-filled extraction when configured", async () => {
     const client =
       ({

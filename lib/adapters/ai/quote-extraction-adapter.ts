@@ -51,10 +51,27 @@ const buildFallbackExtraction = (sourceText: string): ExtractionOutput => ({
   overall_confidence: 0,
 });
 
+const confidenceJsonSchema = { type: "number", minimum: 0, maximum: 1 } as const;
+
 const extractionJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["source_text", "customer_name", "opportunity_name", "requested_items", "delivery_location", "delivery_date", "requested_discount", "installation_requirement", "special_requirements", "missing_fields", "ambiguities", "clarification_questions", "field_confidence", "overall_confidence"],
+  required: [
+    "source_text",
+    "customer_name",
+    "opportunity_name",
+    "requested_items",
+    "delivery_location",
+    "delivery_date",
+    "requested_discount",
+    "installation_requirement",
+    "special_requirements",
+    "missing_fields",
+    "ambiguities",
+    "clarification_questions",
+    "field_confidence",
+    "overall_confidence",
+  ],
   properties: {
     source_text: { type: "string" },
     customer_name: extractedStringJsonSchema(),
@@ -76,48 +93,69 @@ const extractionJsonSchema = {
       },
     },
     delivery_location: extractedStringJsonSchema(),
-    delivery_date: extractedStringJsonSchema(),
+    delivery_date: extractedDateJsonSchema(),
     requested_discount: extractedStringJsonSchema(),
     installation_requirement: extractedStringJsonSchema(),
     special_requirements: extractedStringJsonSchema(),
-    missing_fields: { type: "array", items: { type: "string" } },
-    ambiguities: { type: "array", items: { type: "object", additionalProperties: false, required: ["field", "description"], properties: { field: { type: "string" }, description: { type: "string" } } } },
-    clarification_questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["field", "question"], properties: { field: { type: "string" }, question: { type: "string" } } } },
-    field_confidence: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: 1 } },
-    overall_confidence: { type: "number", minimum: 0, maximum: 1 },
+    missing_fields: { type: "array", items: { type: "string", minLength: 1 }, default: [] },
+    ambiguities: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["field", "description"],
+        properties: { field: { type: "string", minLength: 1 }, description: { type: "string", minLength: 1 } },
+      },
+      default: [],
+    },
+    clarification_questions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["field", "question"],
+        properties: { field: { type: "string", minLength: 1 }, question: { type: "string", minLength: 1 } },
+      },
+      default: [],
+    },
+    field_confidence: { type: "object", additionalProperties: confidenceJsonSchema, default: {} },
+    overall_confidence: confidenceJsonSchema,
   },
 } as const;
 
 function sourceSpanJsonSchema() {
-  return { type: "object", additionalProperties: false, required: ["start", "end", "text"], properties: { start: { type: "integer", minimum: 0 }, end: { type: "integer", minimum: 0 }, text: { type: "string" } } } as const;
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["start", "end"],
+    properties: { start: { type: "integer", minimum: 0 }, end: { type: "integer", minimum: 0 }, text: { type: "string", minLength: 1 } },
+  } as const;
+}
+
+function extractedFieldJsonSchema(valueSchema: unknown) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["value", "missing", "confidence", "source_span"],
+    properties: {
+      value: valueSchema,
+      missing: { type: "boolean" },
+      confidence: confidenceJsonSchema,
+      source_span: { anyOf: [sourceSpanJsonSchema(), { type: "null" }] },
+    },
+  } as const;
 }
 
 function extractedStringJsonSchema() {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["value", "missing", "confidence", "source_span"],
-    properties: {
-      value: { type: ["string", "null"] },
-      missing: { type: "boolean" },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-      source_span: { anyOf: [sourceSpanJsonSchema(), { type: "null" }] },
-    },
-  } as const;
+  return extractedFieldJsonSchema({ anyOf: [{ type: "string", minLength: 1 }, { type: "null" }] });
 }
 
 function extractedNumberJsonSchema() {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["value", "missing", "confidence", "source_span"],
-    properties: {
-      value: { type: ["number", "null"] },
-      missing: { type: "boolean" },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-      source_span: { anyOf: [sourceSpanJsonSchema(), { type: "null" }] },
-    },
-  } as const;
+  return extractedFieldJsonSchema({ anyOf: [{ type: "number" }, { type: "null" }] });
+}
+
+function extractedDateJsonSchema() {
+  return extractedFieldJsonSchema({ anyOf: [{ type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, { type: "null" }] });
 }
 
 const getResponseText = (response: { output_text?: string; output?: unknown }) => {
@@ -152,7 +190,15 @@ export const createQuoteExtractionAdapter = (options: QuoteExtractionAdapterOpti
               content: [
                 {
                   type: "input_text",
-                  text: "Extract only Phase 3 quote-request facts explicitly present in the source. Represent every missing value as null with missing=true. Populate requested_items with raw_item_description, requested_sku, quantity, and specifications only from source evidence. Do not invent SKU, discounts, pricing, inventory, margin, approval, quote totals, or workflow-status claims. Include confidence scores from 0 to 1 and source spans only when supported by the source text; use confidence 0 and source_span null for missing fields. Return no fields outside the schema.",
+                  text: [
+                    "Extract Phase 3 quote-request facts only when they are explicitly present in the supplied source text.",
+                    "Use null with missing=true for every absent fact; never fill absent values with guesses or placeholders.",
+                    "Do not invent SKUs. Capture requested_sku only when the source text supplies the SKU or part number.",
+                    "Do not retrieve, infer, calculate, or assert price, discounts beyond the customer's requested discount text, inventory, approval status, quote totals, margin, workflow state, or any other commercial truth.",
+                    "Mark uncertain information explicitly by lowering confidence and adding an ambiguity or clarification question when appropriate.",
+                    "Include source spans only when directly supported by the source text; use confidence 0 and source_span null for missing fields.",
+                    "Return only the supplied schema fields and no extra fields.",
+                  ].join(" "),
                 },
               ],
             },
