@@ -12,6 +12,7 @@ const toRule = (price: Awaited<ReturnType<Repositories["prices"]["findActivePric
   customerTier: price.customer_tier ?? "",
   currencyCode: price.currency_code,
   unitPrice: price.unit_price,
+  unitCost: price.unit_cost,
   effectiveFrom: price.effective_from,
   effectiveTo: price.effective_to,
   active: true,

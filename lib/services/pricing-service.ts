@@ -18,8 +18,8 @@ export type PriceRequest = Pick<
 
 export const createPricingService = (provider: PricingRulesProvider) => ({
   async resolvePrice(request: PriceRequest): Promise<ResolvedPrice> {
-    const rules = await provider.getPricingRules(request);
-    return resolvePricing({ ...request, ...rules });
+    const pricingRules = await provider.getPricingRules(request);
+    return resolvePricing({ ...request, ...pricingRules });
   },
 });
 

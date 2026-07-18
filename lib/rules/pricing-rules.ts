@@ -1,17 +1,11 @@
 export const pricingPrecedence = {
   customerSpecificPrice: 1,
   customerTierPrice: 2,
-  quantityVolumeRule: 3,
-  listPrice: 4,
-  pricingException: 5,
+  listPrice: 3,
+  pricingBlocker: 4,
 } as const;
 
-export type PriceType =
-  | "customer_specific"
-  | "customer_tier"
-  | "quantity_volume"
-  | "list"
-  | "blocking_exception";
+export type PriceType = "customer_specific" | "customer_tier" | "list" | "blocking_exception";
 
 export type PricingProvenance = {
   price_id: string;
@@ -24,11 +18,20 @@ export type PricingProvenance = {
 };
 
 export type ResolvedPrice = {
-  unitPrice: number | null;
+  unitPriceCents: number | null;
+  unitCostCents: number | null;
   currencyCode: string;
+  priceType: PriceType;
+  sourceName: string;
+  sourceVersion: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  precedenceReason: string;
   blocked: boolean;
   reason: string | null;
   provenance: PricingProvenance;
+  /** @deprecated Use unitPriceCents for commercial calculations. */
+  unitPrice: number | null;
 };
 
 type PricedRule = {
@@ -36,6 +39,7 @@ type PricedRule = {
   productId: string;
   currencyCode: string;
   unitPrice: number;
+  unitCost?: number | null;
   effectiveFrom: string;
   effectiveTo?: string | null;
   active: boolean;
@@ -45,6 +49,7 @@ type PricedRule = {
 
 export type CustomerSpecificPrice = PricedRule & { customerId: string };
 export type CustomerTierPrice = PricedRule & { customerTier: string };
+export type ListPrice = Omit<PricedRule, "active"> & { active?: boolean };
 
 export type QuantityVolumeRule = Omit<PricedRule, "unitPrice"> & {
   minimumQuantity: number;
@@ -52,8 +57,6 @@ export type QuantityVolumeRule = Omit<PricedRule, "unitPrice"> & {
   percentOff?: number | null;
   amountOff?: number | null;
 };
-
-export type ListPrice = Omit<PricedRule, "active"> & { active?: boolean };
 
 export type PricingException = {
   id: string;
@@ -80,6 +83,8 @@ export type ResolvePricingInput = {
   listPrices?: ListPrice[];
   pricingExceptions?: PricingException[];
 };
+
+const moneyToCents = (amount: number) => Math.round(amount * 100);
 
 const isEffective = (
   rule: { active?: boolean; effectiveFrom: string; effectiveTo?: string | null },
@@ -125,105 +130,107 @@ const appliesToRequest = (
   onDate: string,
 ) => rule.productId === input.productId && rule.currencyCode === input.currencyCode && isEffective(rule, onDate);
 
-const resolveQuantityUnitPrice = (rule: QuantityVolumeRule, listPrice: ListPrice | null) => {
-  if (rule.unitPrice != null) return rule.unitPrice;
-  if (!listPrice) return null;
-  if (rule.percentOff != null) return Math.max(listPrice.unitPrice * (1 - rule.percentOff / 100), 0);
-  if (rule.amountOff != null) return Math.max(listPrice.unitPrice - rule.amountOff, 0);
-  return null;
+type SelectedPriceRule = CustomerSpecificPrice | CustomerTierPrice | ListPrice;
+
+const block = ({
+  currencyCode,
+  reason,
+  sourceName = "pricing-rules",
+  sourceVersion = "unresolved",
+  effectiveFrom = null,
+  effectiveTo = null,
+}: {
+  currencyCode: string;
+  reason: string;
+  sourceName?: string;
+  sourceVersion?: string;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+}): ResolvedPrice => ({
+  unitPriceCents: null,
+  unitCostCents: null,
+  currencyCode,
+  priceType: "blocking_exception",
+  sourceName,
+  sourceVersion,
+  effectiveFrom,
+  effectiveTo,
+  precedenceReason: reason,
+  blocked: true,
+  reason,
+  unitPrice: null,
+  provenance: {
+    price_id: "pricing-blocker",
+    sourceName,
+    sourceVersion,
+    priceType: "blocking_exception",
+    effectiveFrom,
+    effectiveTo,
+    precedenceRank: pricingPrecedence.pricingBlocker,
+  },
+});
+
+const resolved = (rule: SelectedPriceRule, priceType: Exclude<PriceType, "blocking_exception">, precedenceRank: number, precedenceReason: string): ResolvedPrice => {
+  const effectiveTo = rule.effectiveTo ?? null;
+  const unitCostCents = rule.unitCost == null ? null : moneyToCents(rule.unitCost);
+
+  return {
+    unitPriceCents: moneyToCents(rule.unitPrice),
+    unitCostCents,
+    currencyCode: rule.currencyCode,
+    priceType,
+    sourceName: rule.sourceName,
+    sourceVersion: rule.sourceVersion,
+    effectiveFrom: rule.effectiveFrom,
+    effectiveTo,
+    precedenceReason: unitCostCents == null ? `${precedenceReason}; missing unit cost blocks commercial readiness` : precedenceReason,
+    blocked: unitCostCents == null,
+    reason: unitCostCents == null ? "Unit cost is required before this quote is commercially ready." : null,
+    unitPrice: rule.unitPrice,
+    provenance: provenanceFor({ rule, priceType, precedenceRank }),
+  };
 };
 
 export const resolvePricing = (input: ResolvePricingInput): ResolvedPrice => {
   const onDate = input.onDate ?? new Date().toISOString().slice(0, 10);
-  const currentListPrice =
-    [...(input.listPrices ?? [])]
-      .filter((rule) => appliesToRequest(rule, input, onDate))
-      .sort(newestFirst)[0] ?? null;
 
   const customerSpecificPrice = [...(input.customerSpecificPrices ?? [])]
     .filter((rule) => rule.customerId === input.customerId && appliesToRequest(rule, input, onDate))
     .sort(newestFirst)[0];
   if (customerSpecificPrice) {
-    return {
-      unitPrice: customerSpecificPrice.unitPrice,
-      currencyCode: customerSpecificPrice.currencyCode,
-      blocked: false,
-      reason: null,
-      provenance: provenanceFor({
-        rule: customerSpecificPrice,
-        priceType: "customer_specific",
-        precedenceRank: pricingPrecedence.customerSpecificPrice,
-      }),
-    };
+    return resolved(customerSpecificPrice, "customer_specific", pricingPrecedence.customerSpecificPrice, "Active customer-specific price matched customer, product, currency, and date.");
   }
 
   const customerTierPrice = [...(input.customerTierPrices ?? [])]
     .filter((rule) => rule.customerTier === input.customerTier && appliesToRequest(rule, input, onDate))
     .sort(newestFirst)[0];
   if (customerTierPrice) {
-    return {
-      unitPrice: customerTierPrice.unitPrice,
-      currencyCode: customerTierPrice.currencyCode,
-      blocked: false,
-      reason: null,
-      provenance: provenanceFor({
-        rule: customerTierPrice,
-        priceType: "customer_tier",
-        precedenceRank: pricingPrecedence.customerTierPrice,
-      }),
-    };
+    return resolved(customerTierPrice, "customer_tier", pricingPrecedence.customerTierPrice, "No active customer-specific price matched; active customer-tier price matched tier, product, currency, and date.");
   }
 
-  const quantityVolumeRule = [...(input.quantityVolumeRules ?? [])]
-    .filter((rule) => input.quantity >= rule.minimumQuantity && appliesToRequest(rule, input, onDate))
-    .sort((left, right) => right.minimumQuantity - left.minimumQuantity || newestFirst(left, right))[0];
-  if (quantityVolumeRule) {
-    const unitPrice = resolveQuantityUnitPrice(quantityVolumeRule, currentListPrice);
-    if (unitPrice != null) {
-      return {
-        unitPrice,
-        currencyCode: quantityVolumeRule.currencyCode,
-        blocked: false,
-        reason: null,
-        provenance: provenanceFor({
-          rule: quantityVolumeRule,
-          priceType: "quantity_volume",
-          precedenceRank: pricingPrecedence.quantityVolumeRule,
-        }),
-      };
-    }
-  }
-
-  if (currentListPrice) {
-    return {
-      unitPrice: currentListPrice.unitPrice,
-      currencyCode: currentListPrice.currencyCode,
-      blocked: false,
-      reason: null,
-      provenance: provenanceFor({
-        rule: currentListPrice,
-        priceType: "list",
-        precedenceRank: pricingPrecedence.listPrice,
-      }),
-    };
+  const listPrice = [...(input.listPrices ?? [])]
+    .filter((rule) => appliesToRequest(rule, input, onDate))
+    .sort(newestFirst)[0];
+  if (listPrice) {
+    return resolved(listPrice, "list", pricingPrecedence.listPrice, "No active customer-specific or customer-tier price matched; active list price matched product, currency, and date.");
   }
 
   const pricingException = [...(input.pricingExceptions ?? [])]
     .filter((rule) => appliesToRequest(rule, input, onDate))
     .sort(newestFirst)[0];
   if (pricingException) {
-    return {
-      unitPrice: null,
+    return block({
       currencyCode: pricingException.currencyCode,
-      blocked: true,
       reason: pricingException.reason,
-      provenance: provenanceFor({
-        rule: pricingException,
-        priceType: "blocking_exception",
-        precedenceRank: pricingPrecedence.pricingException,
-      }),
-    };
+      sourceName: pricingException.sourceName,
+      sourceVersion: pricingException.sourceVersion,
+      effectiveFrom: pricingException.effectiveFrom,
+      effectiveTo: pricingException.effectiveTo ?? null,
+    });
   }
 
-  throw new Error(`No price or pricing exception found for product ${input.productId} in ${input.currencyCode}`);
+  return block({
+    currencyCode: input.currencyCode,
+    reason: `No active price found for product ${input.productId} in ${input.currencyCode} on ${onDate}; quoting is blocked.`,
+  });
 };
