@@ -23,7 +23,12 @@ import { WorkspaceGrid } from "@/components/app-shell/workspace-grid";
 import {
   quoteIntakeSchema,
   type QuoteIntakeInput,
+  type QuoteIntakeSeedId,
 } from "@/lib/schemas/quote-intake";
+import {
+  intakeSeedExamples,
+  intakeSeedExampleById,
+} from "@/lib/fixtures/intake-seed-examples";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,12 +84,6 @@ const intakeChecklist = [
   "Clarifications recorded before review",
 ];
 
-const seedExamples = {
-  A: "Atlas Manufacturing needs 4 AX-200 industrial compressors delivered to Dallas before Sep 15. They are requesting 8% off and may require installation.",
-  B: "Northwind Facilities requested 12 replacement filter kits for their Phoenix distribution center by Oct 3. They mentioned PO to follow and asked whether expedited delivery is available.",
-  C: "Contoso Healthcare needs a budgetary quote for 6 mobile workstations and 2 spare battery packs shipped to Boston before the end of the month. Payment terms and installation requirements are unclear.",
-} satisfies Record<NonNullable<QuoteIntakeInput["seededScenarioId"]>, string>;
-
 export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
   const [result, setResult] = useState<IntakeActionState | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -113,15 +112,28 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
   }, []);
 
   const onSeedExampleChange = (value: string) => {
-    const id = value as NonNullable<QuoteIntakeInput["seededScenarioId"]>;
+    const id = value as QuoteIntakeSeedId;
+    const seedExample = intakeSeedExampleById[id];
     form.setValue("seededScenarioId", id, {
       shouldDirty: true,
       shouldValidate: true,
     });
-    form.setValue("requestText", seedExamples[id], {
+    form.setValue("requestText", seedExample.requestText, {
       shouldDirty: true,
       shouldValidate: true,
     });
+
+    const metadataFields = Object.entries(seedExample.metadata) as [
+      keyof QuoteIntakeInput,
+      string,
+    ][];
+
+    for (const [fieldName, fieldValue] of metadataFields) {
+      form.setValue(fieldName, fieldValue, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
   };
 
   const onSubmit = (values: QuoteIntakeInput) => {
@@ -154,11 +166,11 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
                     <SelectValue placeholder="Select an example request" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="A">Atlas compressor request</SelectItem>
-                    <SelectItem value="B">Northwind filter kits</SelectItem>
-                    <SelectItem value="C">
-                      Contoso healthcare budgetary quote
-                    </SelectItem>
+                    {intakeSeedExamples.map((example) => (
+                      <SelectItem key={example.id} value={example.id}>
+                        {example.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>

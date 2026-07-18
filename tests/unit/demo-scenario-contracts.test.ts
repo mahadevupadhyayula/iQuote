@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { intakeSeedExamples } from "@/lib/fixtures/intake-seed-examples";
+import { quoteIntakeSchema, quoteIntakeSeedIds } from "@/lib/schemas/quote-intake";
 import { demoProducts, demoScenarioContracts, seededDiscountPolicies } from "@/lib/demo/scenario-contracts";
 import { evaluateApprovalPolicy } from "@/lib/rules/approval-rules";
 import { evaluateInventory, type InventoryRuleRecord } from "@/lib/rules/inventory-rules";
@@ -92,5 +94,43 @@ describe("demo scenario contracts", () => {
     });
     expect({ ready: readiness.ready, status: readiness.status, blockerCodes: readiness.blockers.map((blocker) => blocker.code) }).toEqual(contract.expected.readinessResult);
     expectValidStatusPath(contract.expected.quoteStatusPath);
+  });
+});
+
+describe("intake seed examples", () => {
+  it("keeps exported seed identifiers aligned with fixture ids", () => {
+    expect(intakeSeedExamples.map((example) => example.id)).toEqual([
+      ...quoteIntakeSeedIds,
+    ]);
+  });
+
+  it("keeps every intake seed valid for the quote intake schema", () => {
+    for (const example of intakeSeedExamples) {
+      expect(
+        quoteIntakeSchema.safeParse({
+          ...example.metadata,
+          requestText: example.requestText,
+          seededScenarioId: example.id,
+        }).success,
+        example.id,
+      ).toBe(true);
+    }
+  });
+
+  it("covers the Atlas request contract for controlled demo extraction", () => {
+    const atlasSeed = intakeSeedExamples.find(
+      (example) => example.id === "atlas-install-ambiguity",
+    );
+
+    expect(atlasSeed).toBeDefined();
+    expect(atlasSeed?.metadata.customerName).toBe("Atlas Manufacturing");
+    expect(atlasSeed?.metadata.opportunityName).toBe("Dallas Paint Line Expansion");
+    expect(atlasSeed?.metadata.validUntil).toBe("2026-09-15");
+    expect(atlasSeed?.requestText).toContain("requested fields");
+    expect(atlasSeed?.requestText).toContain("Installation is ambiguous");
+    expect(atlasSeed?.requestText).toContain("AX-200");
+    expect(atlasSeed?.requestText).toContain(
+      "delivery to Dallas no later than September 15, 2026",
+    );
   });
 });
