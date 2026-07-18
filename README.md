@@ -82,6 +82,12 @@ npm run demo:reset
 
 This calls `POST /api/demo/reset`, which deletes and recreates the Atlas/Northstar demo customers, products, prices, inventory, and discount policies.
 
+## PDF rendering
+
+Quote PDFs are rendered server-side without an external PDF runtime dependency. The endpoint prepares a customer-safe quote document model in `lib/pdf/quote-document.tsx`, then `lib/pdf/render-quote-pdf.ts` serializes a minimal PDF 1.4 document directly with built-in Node.js `Buffer` support, Type1 Helvetica fonts, drawing primitives, and escaped text content streams.
+
+This keeps commercial truth deterministic: quote pricing, totals, approval state, and customer-safe line details come from the approved quote view model rather than from an AI or third-party rendering service.
+
 ## Tests and checks
 
 Run linting:
