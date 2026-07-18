@@ -16,23 +16,27 @@ describe("createQuoteExtractionAdapter", () => {
     const client = mockClient({
       output_text: JSON.stringify({
         source_text: sourceText,
-        customer_name: { value: "Atlas", missing: false },
-        customer_email: { value: "buyer@atlas.example", missing: false },
-        opportunity_name: { value: null, missing: true },
-        currency_code: { value: null, missing: true },
-        requested_valid_until: { value: null, missing: true },
-        lines: [
+        customer_name: { value: "Atlas", missing: false, confidence: 0.9, source_span: null },
+        opportunity_name: { value: null, missing: true, confidence: 0, source_span: null },
+        requested_items: [
           {
             line_number: 1,
-            sku: { value: "HX-500", missing: false },
-            description: { value: null, missing: true },
-            quantity: { value: 4, missing: false },
-            requested_unit_price: { value: null, missing: true },
-            needed_by: { value: "2026-08-01", missing: false },
-            notes: { value: null, missing: true },
+            raw_item_description: { value: "4 HX-500 units", missing: false, confidence: 0.8, source_span: null },
+            requested_sku: { value: "HX-500", missing: false, confidence: 0.95, source_span: null },
+            quantity: { value: 4, missing: false, confidence: 0.95, source_span: null },
+            specifications: { value: null, missing: true, confidence: 0, source_span: null },
           },
         ],
-        missing_fields: ["opportunity_name", "currency_code", "requested_valid_until", "lines[0].requested_unit_price"],
+        delivery_location: { value: null, missing: true, confidence: 0, source_span: null },
+        delivery_date: { value: "2026-08-01", missing: false, confidence: 0.95, source_span: null },
+        requested_discount: { value: null, missing: true, confidence: 0, source_span: null },
+        installation_requirement: { value: null, missing: true, confidence: 0, source_span: null },
+        special_requirements: { value: null, missing: true, confidence: 0, source_span: null },
+        missing_fields: ["opportunity_name", "requested_items[0].specifications", "delivery_location", "requested_discount", "installation_requirement", "special_requirements"],
+        ambiguities: [],
+        clarification_questions: [],
+        field_confidence: { customer_name: 0.9 },
+        overall_confidence: 0.85,
       }),
     });
 
@@ -40,7 +44,7 @@ describe("createQuoteExtractionAdapter", () => {
 
     await expect(adapter.extractQuoteRequest(sourceText)).resolves.toMatchObject({
       customer_name: { value: "Atlas", missing: false },
-      lines: [{ sku: { value: "HX-500", missing: false }, requested_unit_price: { value: null, missing: true } }],
+      requested_items: [{ requested_sku: { value: "HX-500", missing: false }, specifications: { value: null, missing: true } }],
     });
     expect(client.responses.create).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-test" }));
   });
@@ -49,25 +53,29 @@ describe("createQuoteExtractionAdapter", () => {
     const client = mockClient({
       output_text: JSON.stringify({
         source_text: "Need a quote.",
-        customer_name: { value: null, missing: true },
-        customer_email: { value: null, missing: true },
-        opportunity_name: { value: null, missing: true },
-        currency_code: { value: null, missing: true },
-        requested_valid_until: { value: null, missing: true },
-        lines: [
+        customer_name: { value: null, missing: true, confidence: 0, source_span: null },
+        opportunity_name: { value: null, missing: true, confidence: 0, source_span: null },
+        requested_items: [
           {
             line_number: 1,
-            sku: { value: "INVENTED-SKU", missing: false },
-            description: { value: "Need a quote.", missing: false },
-            quantity: { value: null, missing: true },
-            requested_unit_price: { value: null, missing: true },
-            needed_by: { value: null, missing: true },
-            notes: { value: null, missing: true },
+            raw_item_description: { value: "Need a quote.", missing: false, confidence: 0.8, source_span: null },
+            requested_sku: { value: "INVENTED-SKU", missing: false, confidence: 0.9, source_span: null },
+            quantity: { value: null, missing: true, confidence: 0, source_span: null },
+            specifications: { value: null, missing: true, confidence: 0, source_span: null },
             inventory: { value: "available", missing: false },
           },
         ],
+        delivery_location: { value: null, missing: true, confidence: 0, source_span: null },
+        delivery_date: { value: null, missing: true, confidence: 0, source_span: null },
+        requested_discount: { value: null, missing: true, confidence: 0, source_span: null },
+        installation_requirement: { value: null, missing: true, confidence: 0, source_span: null },
+        special_requirements: { value: null, missing: true, confidence: 0, source_span: null },
         approval_status: "approved",
         missing_fields: [],
+        ambiguities: [],
+        clarification_questions: [],
+        field_confidence: {},
+        overall_confidence: 0.5,
       }),
     });
 
@@ -87,11 +95,11 @@ describe("createQuoteExtractionAdapter", () => {
 
     await expect(adapter.extractQuoteRequest("Please quote rugged scanners.")).resolves.toMatchObject({
       customer_name: { value: null, missing: true },
-      lines: [
+      requested_items: [
         {
-          sku: { value: null, missing: true },
-          description: { value: "Please quote rugged scanners.", missing: false },
-          requested_unit_price: { value: null, missing: true },
+          requested_sku: { value: null, missing: true },
+          raw_item_description: { value: "Please quote rugged scanners.", missing: false },
+          quantity: { value: null, missing: true },
         },
       ],
     });

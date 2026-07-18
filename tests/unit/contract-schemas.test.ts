@@ -5,6 +5,7 @@ import {
   allowedTransitionTableSchema,
   approvalSchema,
   discountDecisionSchema,
+  extractionOutputSchema,
   inventoryResultSchema,
   priceResultSchema,
   productSchema,
@@ -154,6 +155,39 @@ describe("contract schemas", () => {
 
     expectValid(workflowEventSchema, valid);
     expectInvalid(workflowEventSchema, { ...valid, eventType: "autonomous_agent_started" });
+  });
+
+  it("validates Phase 3 extraction outputs and rejects missing-field inventions", () => {
+    const nullString = { value: null, missing: true, confidence: 0, source_span: null };
+    const valid = {
+      source_text: "Acme needs 2 HX-500 scanners in Denver by 2026-08-01.",
+      customer_name: { value: "Acme", missing: false, confidence: 0.9, source_span: null },
+      opportunity_name: nullString,
+      requested_items: [
+        {
+          line_number: 1,
+          raw_item_description: { value: "2 HX-500 scanners", missing: false, confidence: 0.8, source_span: null },
+          requested_sku: { value: "HX-500", missing: false, confidence: 0.95, source_span: null },
+          quantity: { value: 2, missing: false, confidence: 0.95, source_span: null },
+          specifications: nullString,
+        },
+      ],
+      delivery_location: { value: "Denver", missing: false, confidence: 0.8, source_span: null },
+      delivery_date: { value: "2026-08-01", missing: false, confidence: 0.9, source_span: null },
+      requested_discount: nullString,
+      installation_requirement: nullString,
+      special_requirements: nullString,
+      missing_fields: ["opportunity_name", "requested_items[0].specifications", "requested_discount", "installation_requirement", "special_requirements"],
+      ambiguities: [],
+      clarification_questions: [{ field: "requested_discount", question: "Please provide any requested discount." }],
+      field_confidence: { customer_name: 0.9, "requested_items[0].quantity": 0.95 },
+      overall_confidence: 0.86,
+    };
+
+    expectValid(extractionOutputSchema, valid);
+    expectInvalid(extractionOutputSchema, { ...valid, overall_confidence: 1.01 });
+    expectInvalid(extractionOutputSchema, { ...valid, field_confidence: { customer_name: -0.1 } });
+    expectInvalid(extractionOutputSchema, { ...valid, opportunity_name: { value: "Invented opportunity", missing: true, confidence: 0.4, source_span: null } });
   });
 
   it("validates quote status union values", () => {

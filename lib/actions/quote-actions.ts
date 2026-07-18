@@ -122,12 +122,12 @@ export async function extractAndBuildQuote(input: ExtractAndBuildQuoteActionInpu
   const { repositories } = getContext();
   const extractionService = createExtractionService({ quotesRepository: repositories.quotes, workflowEventsRepository: repositories.workflowEvents, extractionAdapter: createQuoteExtractionAdapter() });
   const result = await extractionService.extractAndPersist({ quoteId: data.quote_id, sourceText: data.source_text, actorId: data.actor_id ?? null });
-  const extractedLines = result.extraction?.lines.map((line) => ({ lineNumber: line.line_number, sku: line.sku.value, description: line.description.value })).filter((line) => line.sku || line.description) ?? [];
+  const extractedLines = result.extraction?.requested_items.map((line) => ({ lineNumber: line.line_number, sku: line.requested_sku.value, description: line.raw_item_description.value })).filter((line) => line.sku || line.description) ?? [];
   const matches = await createProductMatchingService({ productsRepository: repositories.products }).matchLines(extractedLines);
   const items = await Promise.all(matches.map(async (match) => {
-    const extracted = result.extraction?.lines.find((line) => line.line_number === match.lineNumber);
+    const extracted = result.extraction?.requested_items.find((line) => line.line_number === match.lineNumber);
     const price = match.product ? await repositories.prices.findCurrentPrice(match.product.id, result.quote.currency_code) : null;
-    return toQuoteItems([{ product_id: match.product?.id ?? null, sku: match.product?.sku ?? extracted?.sku.value ?? "UNMATCHED", description: match.product?.name ?? extracted?.description.value ?? "Unmatched item", quantity: extracted?.quantity.value ?? 1, unit_price: extracted?.unit_price.value ?? price?.unit_price ?? 0, discount_bps: extracted?.discount_bps.value ?? 0, metadata: { product_match: match } }])[0];
+    return toQuoteItems([{ product_id: match.product?.id ?? null, sku: match.product?.sku ?? extracted?.requested_sku.value ?? "UNMATCHED", description: match.product?.name ?? extracted?.raw_item_description.value ?? "Unmatched item", quantity: extracted?.quantity.value ?? 1, unit_price: price?.unit_price ?? 0, discount_bps: 0, metadata: { product_match: match } }])[0];
   }));
   const replaced = await repositories.quotes.replaceItems(data.quote_id, items);
   const quote = await refreshQuoteAmounts(data.quote_id, replaced);
