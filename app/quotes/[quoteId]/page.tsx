@@ -32,10 +32,10 @@ import {
 import { WorkspaceGrid } from "@/components/app-shell/workspace-grid";
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import {
-  CorrectionForm,
   FulfillmentButton,
   QuoteWorkflowActions,
 } from "@/components/quotes/quote-workspace-actions";
+import { QuoteReviewWorkspace } from "@/components/quotes/quote-review-workspace";
 
 const currency = (amount: number, code = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(
@@ -458,20 +458,9 @@ export default async function QuoteWorkspacePage({
         </Badge>
       </header>
       <ExceptionCards quote={quote} />
+      <QuoteReviewWorkspace quote={quote} />
       <WorkspaceGrid
-        left={
-          <>
-            <RequirementsCard quote={quote} />
-            <Card>
-              <CardHeader>
-                <CardTitle>Corrections</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CorrectionForm quote={quote} />
-              </CardContent>
-            </Card>
-          </>
-        }
+        left={<RequirementsCard quote={quote} />}
         main={
           <>
             <QuoteConfigurationTable quote={quote} />

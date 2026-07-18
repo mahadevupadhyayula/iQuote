@@ -92,6 +92,18 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
   };
   workflowEvents: WorkflowEventRecord[];
   internalNotes: unknown;
+  reviewMetadata: {
+    extraction: Record<string, unknown>;
+    extractionStatus: string | null;
+    extractionFields: Record<string, unknown>;
+    fieldConfidence: Record<string, unknown>;
+    missingFields: string[];
+    clarificationQuestions: unknown[];
+    manualEntry: { enabled: boolean; reason: string | null };
+    requirements: Record<string, unknown>;
+    review: Record<string, unknown>;
+    originalRequestText: string | null;
+  };
 };
 
 const cents = (amount: number): Cents => Math.round(amount * 100) as Cents;
@@ -103,6 +115,25 @@ const metadataNumber = (metadata: Record<string, unknown>, key: string, fallback
 const metadataString = (metadata: Record<string, unknown>, key: string) => {
   const value = metadata[key];
   return typeof value === "string" && value.length > 0 ? value : null;
+};
+const metadataObject = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
+const metadataStringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const metadataArray = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+const reviewMetadata = (metadata: Record<string, unknown>): InternalQuoteWorkspaceViewModel["reviewMetadata"] => {
+  const extraction = metadataObject(metadata.extraction);
+  const manualEntry = metadataObject(metadata.manual_entry);
+  return {
+    extraction,
+    extractionStatus: typeof extraction.status === "string" ? extraction.status : null,
+    extractionFields: metadataObject(extraction.fields),
+    fieldConfidence: metadataObject(extraction.field_confidence),
+    missingFields: metadataStringArray(extraction.missing_fields),
+    clarificationQuestions: metadataArray(extraction.clarification_questions),
+    manualEntry: { enabled: manualEntry.enabled === true, reason: typeof manualEntry.reason === "string" ? manualEntry.reason : null },
+    requirements: metadataObject(metadata.requirements),
+    review: metadataObject(metadata.review),
+    originalRequestText: typeof extraction.original_request_text === "string" ? extraction.original_request_text : typeof extraction.source_text === "string" ? extraction.source_text : null,
+  };
 };
 
 const toCustomer = (quote: QuoteWithItems, customer: CustomerRecord | null): CustomerQuoteViewModel => ({
@@ -234,6 +265,7 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
       sla: sla(quote, now()),
       workflowEvents,
       internalNotes: quote.metadata.internal_notes,
+      reviewMetadata: reviewMetadata(quote.metadata),
     };
   },
 });
