@@ -28,7 +28,8 @@
     "tailwind-merge": "latest",
     "tailwindcss-animate": "latest",
     "@supabase/supabase-js": "latest",
-    "zod": "latest"
+    "zod": "latest",
+    "openai": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
