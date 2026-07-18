@@ -188,7 +188,10 @@ export async function submitQuoteForApproval(input: SubmitQuoteForApprovalAction
   const marginBps = calculateQuote(quote.items.map((item) => ({ quantity: item.quantity, unitPriceCents: Math.round(item.unit_price * 100), unitCostCents: Math.round(Number(item.metadata.unit_cost ?? 0) * 100), discountBps: item.discount_bps }))).grossMarginBps;
   const { createApprovalService } = await import("@/lib/services/approval-service");
   const evaluation = await createApprovalService(repositories.prices).evaluatePolicy({ requestedDiscountBps: discountBps, projectedMarginBps: marginBps });
-  if (evaluation.requiredRole) await repositories.approvals.request({ quote_id: data.quote_id, required_role: evaluation.requiredRole, requested_by: data.actor_id ?? null, metadata: { evaluation } });
+  if (evaluation.requiredRole) {
+    const existingApproval = await repositories.approvals.findPendingForRole(data.quote_id, evaluation.requiredRole);
+    if (!existingApproval) await repositories.approvals.request({ quote_id: data.quote_id, required_role: evaluation.requiredRole, requested_by: data.actor_id ?? null, metadata: { evaluation } });
+  }
   const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: evaluation.requiredRole ? "pending_approval" : "approved", actorId: data.actor_id ?? null, payload: { action: "submit_quote_for_approval", evaluation }, idempotencyKey: data.idempotency_key });
   revalidatePath(quotePath(data.quote_id));
   return result.quote;
@@ -203,7 +206,7 @@ export async function generateQuote(input: GenerateQuoteActionInput) {
   const [products, prices, approvals] = await Promise.all([Promise.all(productIds.map((id) => repositories.products.findById(id))), repositories.prices.listCurrentPrices(productIds, quote.currency_code), repositories.approvals.listByQuote(data.quote_id)]);
   const readiness = evaluateQuoteReadiness({ customerId: quote.customer_id, currencyCode: quote.currency_code, lines: quote.items.map((item) => ({ productId: item.product_id, sku: item.sku, description: item.description, quantity: item.quantity })), products: products.filter((product): product is NonNullable<typeof product> => Boolean(product)), prices: prices.map((price) => ({ productId: price.product_id, unitPrice: price.unit_price, currencyCode: price.currency_code, effectiveFrom: price.effective_from, effectiveTo: price.effective_to })), inventoryDecisions: quote.items.map((item) => item.metadata.inventory_decision).filter(Boolean) as never, marginPolicy: evaluateMarginFloor({ sellPriceCents: Math.round(quote.total_amount * 100), costCents: 0, floorBps: 0 }), approvals: approvals.map((approval) => ({ requiredRole: approval.required_role, status: approval.status })), paymentTerms: data.payment_terms ?? (quote.metadata.payment_terms as never) });
   const updated = await repositories.quotes.update(data.quote_id, { metadata: { ...quote.metadata, readiness, payment_terms: data.payment_terms ?? quote.metadata.payment_terms, generated_at: readiness.ready ? new Date().toISOString() : null } });
-  if (readiness.ready && (updated.status === "draft" || updated.status === "pending_approval")) await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "approved", actorId: data.actor_id ?? null, payload: { action: "generate_quote", readiness }, idempotencyKey: data.idempotency_key });
+  if (readiness.ready && updated.status === "draft") await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "approved", actorId: data.actor_id ?? null, payload: { action: "generate_quote", readiness }, idempotencyKey: data.idempotency_key });
   await recordUpdate(updated, data.actor_id, "generate_quote", { readiness });
   revalidatePath(quotePath(data.quote_id));
   return { quote: await repositories.quotes.findById(data.quote_id), readiness };

@@ -12,6 +12,12 @@ export type ApprovalCreateInput = Omit<ApprovalRecord, "id" | "requested_at" | "
 };
 
 export const createApprovalsRepository = (client: RepositoryClient) => ({
+  async findById(id: string) {
+    const { data, error } = await client.from("approvals").select("*").eq("id", id).maybeSingle();
+    throwRepositoryError("Find approval", error);
+    return data ? approvalRecordSchema.parse(data) : null;
+  },
+
   async listByQuote(quoteId: string) {
     const { data, error } = await client.from("approvals").select("*").eq("quote_id", quoteId).order("requested_at");
     throwRepositoryError("List approvals by quote", error);
