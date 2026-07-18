@@ -14,7 +14,7 @@ import type {
   ErpInventoryAvailabilityResponse,
   NotificationMessage,
   NotificationReceipt,
-  NotificationsAdapter,
+  NotificationAdapter,
   PricingSourceMetadata,
   PricingSourceMetadataAdapter,
 } from "./interfaces";
@@ -34,6 +34,8 @@ export const createDemoAuthAdapter = (): AuthAdapter => ({
   },
 });
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const toCrmAccount = (customer: CustomerRecord): CrmAccount => ({
   id: customer.id,
   externalId: customer.external_id,
@@ -45,8 +47,11 @@ const toCrmAccount = (customer: CustomerRecord): CrmAccount => ({
 });
 
 export const createMockCrmAdapter = (repositories: Pick<Repositories, "customers">): CrmAdapter => ({
-  async findAccount(accountId: string) {
-    const customer = await repositories.customers.findById(accountId);
+  async findAccount(accountIdOrExternalId: string) {
+    const customer = uuidPattern.test(accountIdOrExternalId)
+      ? ((await repositories.customers.findById(accountIdOrExternalId)) ??
+        (await repositories.customers.findByExternalId(accountIdOrExternalId)))
+      : await repositories.customers.findByExternalId(accountIdOrExternalId);
     return customer ? toCrmAccount(customer) : null;
   },
 
@@ -94,8 +99,11 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
         quantityReserved: record.quantity_reserved,
         reorderPoint: record.reorder_point,
       }),
+      refreshed_at: record.updated_at,
+      warehouseCode: record.location_code,
       asOf: record.updated_at,
     }));
+    const refreshedAt = locations.reduce((latest, location) => (location.refreshed_at > latest ? location.refreshed_at : latest), "");
 
     return {
       productId: product.id,
@@ -103,8 +111,13 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
       name: product.name,
       unitOfMeasure: product.unit_of_measure,
       status: product.status,
-      totalAvailableQuantity: locations.reduce((sum, location) => sum + location.availableQuantity, 0),
+      availableQuantity: locations.reduce((sum, location) => sum + location.availableQuantity, 0),
       availability: summarizeAvailability(locations),
+      warehouses: locations,
+      sourceName: "Demo Inventory",
+      sourceVersion: "seed-v1",
+      refreshed_at: refreshedAt || new Date().toISOString(),
+      totalAvailableQuantity: locations.reduce((sum, location) => sum + location.availableQuantity, 0),
       locations,
     };
   };
@@ -130,13 +143,30 @@ export const createMockPricingSourceMetadataAdapter = (): PricingSourceMetadataA
   },
 });
 
-export const createMockNotificationsAdapter = (): NotificationsAdapter => ({
+const stableNotificationReceiptId = (message: NotificationMessage) => {
+  const payload = JSON.stringify({
+    to: message.to,
+    subject: message.subject,
+    body: message.body,
+    channel: message.channel,
+    metadata: message.metadata ?? {},
+  });
+  let hash = 0;
+  for (let index = 0; index < payload.length; index += 1) {
+    hash = (hash * 31 + payload.charCodeAt(index)) >>> 0;
+  }
+  return `demo-notification-${message.channel}-${hash.toString(16).padStart(8, "0")}`;
+};
+
+export const createMockNotificationAdapter = (): NotificationAdapter => ({
   async send(message: NotificationMessage): Promise<NotificationReceipt> {
     return {
-      id: `demo-notification-${message.channel}-${Date.now()}`,
+      id: stableNotificationReceiptId(message),
       status: "sent",
       channel: message.channel,
-      sentAt: new Date().toISOString(),
+      sentAt: "2026-01-01T00:00:00.000Z",
     };
   },
 });
+
+export const createMockNotificationsAdapter = createMockNotificationAdapter;
