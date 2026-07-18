@@ -1,5 +1,7 @@
 import "server-only";
 
+import { z } from "zod";
+
 import { createOpenAIClient, getOpenAIModel, type OpenAIResponsesClient } from "@/lib/adapters/ai/openai-client";
 import type { ProductsRepository } from "@/lib/repositories/products";
 import type { ProductRecord } from "@/lib/schemas/shared-records";
@@ -15,9 +17,10 @@ export type ProductMatchLine = {
 export type ProductMatch = {
   lineNumber: number;
   product: ProductRecord | null;
-  method: "sku" | "alias" | "replacement" | "substitute" | "ai_suggestion" | "unmatched";
+  method: "sku" | "product_name" | "alias" | "replacement" | "substitute" | "ai_suggestion" | "unmatched";
   confidence: number;
   ambiguous: boolean;
+  requiresRepConfirmation: boolean;
   candidates: ProductRecord[];
   reason: string;
 };
@@ -28,7 +31,11 @@ type ProductMatchingServiceOptions = {
   model?: string;
 };
 
-const normalize = (value: string) => value.trim().toLowerCase();
+const aiRankingSchema = z.object({
+  product_id: z.string().nullable(),
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1),
+});
 
 const getResponseText = (response: { output_text?: string; output?: unknown }) => {
   if (typeof response.output_text === "string") return response.output_text;
@@ -42,48 +49,56 @@ const getResponseText = (response: { output_text?: string; output?: unknown }) =
   throw new Error("OpenAI response did not include suggestion text.");
 };
 
+const toMatch = (line: ProductMatchLine, product: ProductRecord | null, method: ProductMatch["method"], confidence: number, ambiguous: boolean, candidates: ProductRecord[], reason: string): ProductMatch => ({
+  lineNumber: line.lineNumber,
+  product,
+  method,
+  confidence,
+  ambiguous,
+  requiresRepConfirmation: ambiguous,
+  candidates,
+  reason,
+});
+
 export const createProductMatchingService = ({ productsRepository, client = createOpenAIClient(), model = getOpenAIModel() }: ProductMatchingServiceOptions) => {
+  const resolver = createProductResolverService({ productsRepository });
+
   const matchLine = async (line: ProductMatchLine): Promise<ProductMatch> => {
     const sku = line.sku?.trim() ?? "";
     const description = line.description?.trim() ?? "";
-    const deterministicResolution = await createProductResolverService({ productsRepository }).resolve({ sku, alias: line.alias ?? sku, description });
-    if (deterministicResolution.product) {
-      return {
-        lineNumber: line.lineNumber,
-        product: deterministicResolution.product,
-        method: deterministicResolution.method,
-        confidence: deterministicResolution.confidence,
-        ambiguous: false,
-        candidates: [deterministicResolution.product],
-        reason: deterministicResolution.reason,
-      };
-    }
+
+    const skuResolution = sku ? await resolver.resolve({ sku }) : null;
+    if (skuResolution?.product) return toMatch(line, skuResolution.product, skuResolution.method, skuResolution.confidence, false, [skuResolution.product], skuResolution.reason);
+
+    const nameResolution = description ? await resolver.resolve({ name: description }) : null;
+    if (nameResolution?.product) return toMatch(line, nameResolution.product, nameResolution.method, nameResolution.confidence, false, [nameResolution.product], nameResolution.reason);
+
+    const alias = line.alias?.trim() ?? "";
+    const aliasResolution = alias || description ? await resolver.resolve({ alias: alias || description }) : null;
+    if (aliasResolution?.product) return toMatch(line, aliasResolution.product, aliasResolution.method, aliasResolution.confidence, false, [aliasResolution.product], aliasResolution.reason);
 
     const query = sku || description;
     const candidates = query ? await productsRepository.search(query, 10) : [];
-    if (candidates.length === 1) {
-      const candidate = candidates[0];
-      if (sku && normalize(candidate.sku) === normalize(sku)) {
-        return { lineNumber: line.lineNumber, product: candidate, method: "sku", confidence: 1, ambiguous: false, candidates, reason: "Matched normalized SKU from search candidates before AI." };
-      }
-    }
-    if (candidates.length === 0) return { lineNumber: line.lineNumber, product: null, method: "unmatched", confidence: 0, ambiguous: false, candidates, reason: "No deterministic product candidates found." };
+    if (candidates.length === 0) return toMatch(line, null, "unmatched", 0, false, candidates, "No deterministic product candidates found.");
+    if (candidates.length === 1) return toMatch(line, candidates[0], "unmatched", 0.5, true, candidates, "Single catalogue text-search candidate requires rep confirmation before product selection.");
 
     try {
       const response = await client.responses.create({
         model,
         input: [
-          { role: "system", content: [{ type: "input_text", text: "Choose the best product id for the quote line only from provided candidates. Return JSON: {\"product_id\": string|null, \"confidence\": number, \"reason\": string}. Use null for ambiguous or weak matches." }] },
-          { role: "user", content: [{ type: "input_text", text: JSON.stringify({ line, candidates: candidates.map(({ id, sku, name, description }) => ({ id, sku, name, description })) }) }] },
+          { role: "system", content: [{ type: "input_text", text: "Rank the supplied product candidates for the extracted quote line. Choose product_id only from provided candidates. Return JSON: {\"product_id\": string|null, \"confidence\": number, \"reason\": string}. Use null for ambiguous or weak matches. Never infer pricing, discounts, inventory, approval status, or quote totals." }] },
+          { role: "user", content: [{ type: "input_text", text: JSON.stringify({ extracted_line: line, candidates: candidates.map(({ id, sku, name, description }) => ({ id, sku, name, description })) }) }] },
         ],
       });
-      const suggestion = JSON.parse(getResponseText(response)) as { product_id?: string | null; confidence?: number; reason?: string };
+      const suggestion = aiRankingSchema.parse(JSON.parse(getResponseText(response)));
       const product = candidates.find((candidate) => candidate.id === suggestion.product_id) ?? null;
-      const confidence = typeof suggestion.confidence === "number" ? Math.max(0, Math.min(1, suggestion.confidence)) : 0;
-      if (!product || confidence < 0.75) return { lineNumber: line.lineNumber, product: null, method: "unmatched", confidence, ambiguous: true, candidates, reason: suggestion.reason ?? "AI suggestion was ambiguous." };
-      return { lineNumber: line.lineNumber, product, method: "ai_suggestion", confidence, ambiguous: candidates.length > 1, candidates, reason: suggestion.reason ?? "AI selected among ambiguous candidates." };
+      if (suggestion.product_id && !product) {
+        return toMatch(line, null, "unmatched", suggestion.confidence, true, candidates, "AI selected a product id that was not in the supplied candidate list; rep confirmation required.");
+      }
+      if (!product || suggestion.confidence < 0.75) return toMatch(line, null, "unmatched", suggestion.confidence, true, candidates, suggestion.reason || "AI suggestion was ambiguous; rep confirmation required.");
+      return toMatch(line, product, "ai_suggestion", suggestion.confidence, true, candidates, `${suggestion.reason} Rep confirmation required for AI-ranked product match.`);
     } catch (error) {
-      return { lineNumber: line.lineNumber, product: null, method: "unmatched", confidence: 0, ambiguous: true, candidates, reason: error instanceof Error ? error.message : "AI product suggestion failed." };
+      return toMatch(line, null, "unmatched", 0, true, candidates, error instanceof Error ? `${error.message}; rep confirmation required.` : "AI product suggestion failed; rep confirmation required.");
     }
   };
 
