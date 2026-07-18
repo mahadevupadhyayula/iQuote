@@ -29,7 +29,8 @@
     "tailwindcss-animate": "latest",
     "@supabase/supabase-js": "latest",
     "zod": "latest",
-    "openai": "latest"
+    "openai": "latest",
+    "react-hook-form": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
