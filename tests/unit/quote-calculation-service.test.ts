@@ -94,4 +94,60 @@ describe("quote calculation service", () => {
       floorBps: 3_000,
     });
   });
+
+  it("returns explicit line-level and quote-level cents and basis-point totals", () => {
+    const quote = calculateQuote([
+      { lineId: "fractional", quantity: 2.5, unitPriceCents: 199, unitCostCents: 101, discountBps: 1_250 },
+      { lineId: "fixed", quantity: 1, unitPriceCents: 250, unitCostCents: 100, discountAmountCents: 25 },
+    ]);
+
+    expect(quote.lines[0]).toMatchObject({
+      lineSubtotalCents: 498,
+      subtotalCents: 498,
+      lineDiscountCents: 62,
+      discountAmountCents: 62,
+      lineNetTotalCents: 436,
+      netTotalCents: 436,
+      sellPriceCents: 436,
+      extendedUnitCostCents: 253,
+      costCents: 253,
+      grossProfitCents: 183,
+      grossMarginBps: 4_197,
+    });
+    expect(quote).toMatchObject({
+      quoteSubtotalCents: 748,
+      subtotalCents: 748,
+      totalDiscountCents: 87,
+      discountAmountCents: 87,
+      netTotalCents: 661,
+      sellPriceCents: 661,
+      extendedUnitCostCents: 353,
+      costCents: 353,
+      grossProfitCents: 308,
+      grossMarginBps: 4_660,
+    });
+  });
+
+  it("documents deterministic half-up rounding without floating-point money arithmetic", () => {
+    const quote = calculateQuote([
+      { lineId: "rounding", quantity: 1.5, unitPriceCents: 101, unitCostCents: 67, discountBps: 333 },
+    ]);
+
+    expect(quote.lines[0]).toMatchObject({
+      lineSubtotalCents: 152,
+      lineDiscountCents: 5,
+      lineNetTotalCents: 147,
+      extendedUnitCostCents: 101,
+      grossProfitCents: 46,
+      grossMarginBps: 3_129,
+    });
+    expect(quote).toMatchObject({
+      quoteSubtotalCents: 152,
+      totalDiscountCents: 5,
+      netTotalCents: 147,
+      extendedUnitCostCents: 101,
+      grossProfitCents: 46,
+      grossMarginBps: 3_129,
+    });
+  });
 });
