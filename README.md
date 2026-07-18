@@ -39,7 +39,7 @@ Then update `.env.local`:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_ANON_KEY`: local anon key from `supabase start`.
 - `SUPABASE_SERVICE_ROLE_KEY`: local service role key from `supabase start`.
 - `OPENAI_API_KEY`: your OpenAI API key for live extraction.
-- `OPENAI_MODEL`: optional model override; the application default is `gpt-4.1-mini`.
+- `OPENAI_MODEL`: required for live extraction and read only by server-side OpenAI configuration. The `.env.example` value is an operator-selected example default; verify the model is enabled for your OpenAI account before deployment.
 - `ENABLE_DEMO_RESET=true`: enables the demo reset API used by Playwright and local walkthroughs.
 
 ## Run migrations and seed data
