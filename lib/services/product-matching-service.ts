@@ -3,17 +3,19 @@ import "server-only";
 import { createOpenAIClient, getOpenAIModel, type OpenAIResponsesClient } from "@/lib/adapters/ai/openai-client";
 import type { ProductsRepository } from "@/lib/repositories/products";
 import type { ProductRecord } from "@/lib/schemas/shared-records";
+import { createProductResolverService } from "@/lib/services/product-resolver-service";
 
 export type ProductMatchLine = {
   lineNumber: number;
   sku?: string | null;
+  alias?: string | null;
   description?: string | null;
 };
 
 export type ProductMatch = {
   lineNumber: number;
   product: ProductRecord | null;
-  method: "sku" | "alias" | "ai_suggestion" | "unmatched";
+  method: "sku" | "alias" | "replacement" | "substitute" | "ai_suggestion" | "unmatched";
   confidence: number;
   ambiguous: boolean;
   candidates: ProductRecord[];
@@ -43,18 +45,18 @@ const getResponseText = (response: { output_text?: string; output?: unknown }) =
 export const createProductMatchingService = ({ productsRepository, client = createOpenAIClient(), model = getOpenAIModel() }: ProductMatchingServiceOptions) => {
   const matchLine = async (line: ProductMatchLine): Promise<ProductMatch> => {
     const sku = line.sku?.trim() ?? "";
-    if (sku) {
-      const skuProduct = await productsRepository.findBySku(sku);
-      if (skuProduct) return { lineNumber: line.lineNumber, product: skuProduct, method: "sku", confidence: 1, ambiguous: false, candidates: [skuProduct], reason: "Matched exact SKU before AI." };
-
-      const aliasProduct = await productsRepository.findByAlias(sku);
-      if (aliasProduct) return { lineNumber: line.lineNumber, product: aliasProduct, method: "alias", confidence: 0.98, ambiguous: false, candidates: [aliasProduct], reason: "Matched exact product alias before AI." };
-    }
-
     const description = line.description?.trim() ?? "";
-    if (description) {
-      const aliasProduct = await productsRepository.findByAlias(description);
-      if (aliasProduct) return { lineNumber: line.lineNumber, product: aliasProduct, method: "alias", confidence: 0.95, ambiguous: false, candidates: [aliasProduct], reason: "Matched exact description alias before AI." };
+    const deterministicResolution = await createProductResolverService({ productsRepository }).resolve({ sku, alias: line.alias ?? sku, description });
+    if (deterministicResolution.product) {
+      return {
+        lineNumber: line.lineNumber,
+        product: deterministicResolution.product,
+        method: deterministicResolution.method,
+        confidence: deterministicResolution.confidence,
+        ambiguous: false,
+        candidates: [deterministicResolution.product],
+        reason: deterministicResolution.reason,
+      };
     }
 
     const query = sku || description;
