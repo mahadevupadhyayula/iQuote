@@ -165,10 +165,8 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   const product = await repositories.products.findById(targetItem.product_id);
   if (!product) throw new Error(`Product ${targetItem.product_id} was not found.`);
   const inventoryService = createInventoryService({
-    async getInventory() {
-      const inventory = await repositories.inventory.listByProduct(product.id);
-      return { inventory: inventory.map((record) => ({ productId: record.product_id, locationCode: record.location_code, quantityOnHand: record.quantity_on_hand, quantityReserved: record.quantity_reserved, reorderPoint: record.reorder_point, updatedAt: record.updated_at })), replacementInventory: [] };
-    },
+    inventoryRepository: repositories.inventory,
+    productsRepository: repositories.products,
   });
   const inventoryDecision = await inventoryService.evaluateAvailability({ product, quantity: targetItem.quantity, allowSplitFulfillment: true });
   const items = quote.items.map((item) => item.line_number === data.line_number ? { ...item, metadata: { ...item.metadata, inventory_decision: inventoryDecision, selected_fulfillment: data.fulfillment } } : item);

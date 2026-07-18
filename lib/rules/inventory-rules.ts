@@ -7,6 +7,9 @@ export type InventoryRuleRecord = {
   quantityReserved: number;
   reorderPoint: number;
   updatedAt: string;
+  refreshedAt?: string;
+  sourceName?: string;
+  sourceVersion?: string;
 };
 
 export type InventoryRuleProduct = {
@@ -17,11 +20,28 @@ export type InventoryRuleProduct = {
   metadata?: Record<string, unknown>;
 };
 
+export type InventorySourceMetadata = {
+  sourceName: string;
+  sourceVersion: string;
+  refreshedAt: string;
+};
+
+export type WarehouseRefreshTimestamp = {
+  productId: string;
+  locationCode: string;
+  refreshedAt: string;
+  sourceName: string;
+  sourceVersion: string;
+};
+
 export type FulfillmentSource = {
   productId: string;
   locationCode: string;
   quantity: number;
   availableQuantity: number;
+  refreshedAt?: string;
+  sourceName?: string;
+  sourceVersion?: string;
 };
 
 export type ReplacementProposal = {
@@ -30,6 +50,8 @@ export type ReplacementProposal = {
   name: string;
   reason: string;
   fulfillment: FulfillmentSource[];
+  sourceMetadata?: InventorySourceMetadata[];
+  warehouseRefreshTimestamps?: WarehouseRefreshTimestamp[];
 };
 
 export type LaterDeliveryOption = {
@@ -57,6 +79,8 @@ export type InventoryDecision = {
   fulfillment: FulfillmentSource[];
   replacementProposal: ReplacementProposal | null;
   laterDeliveryOptions: LaterDeliveryOption[];
+  sourceMetadata?: InventorySourceMetadata[];
+  warehouseRefreshTimestamps?: WarehouseRefreshTimestamp[];
   reason: string | null;
 };
 
@@ -82,8 +106,12 @@ const addDays = (isoTimestamp: string, days: number) => {
   return date.toISOString().slice(0, 10);
 };
 
+const getRefreshedAt = (record: InventoryRuleRecord) => record.refreshedAt ?? record.updatedAt;
+const getSourceName = (record: InventoryRuleRecord) => record.sourceName ?? "unknown";
+const getSourceVersion = (record: InventoryRuleRecord) => record.sourceVersion ?? "unknown";
+
 const isStale = (record: InventoryRuleRecord, now: string, staleAfterHours: number) =>
-  new Date(now).getTime() - new Date(record.updatedAt).getTime() > staleAfterHours * hoursToMs;
+  new Date(now).getTime() - new Date(getRefreshedAt(record)).getTime() > staleAfterHours * hoursToMs;
 
 const byAvailableDesc = (left: FulfillmentSource, right: FulfillmentSource) =>
   right.availableQuantity - left.availableQuantity || left.locationCode.localeCompare(right.locationCode);
@@ -96,6 +124,9 @@ const sourcesFor = (productId: string, inventory: InventoryRuleRecord[]) =>
       locationCode: record.locationCode,
       quantity: 0,
       availableQuantity: getAvailableQuantity(record),
+      refreshedAt: getRefreshedAt(record),
+      sourceName: getSourceName(record),
+      sourceVersion: getSourceVersion(record),
     }))
     .filter((source) => source.availableQuantity > 0)
     .sort(byAvailableDesc);
@@ -107,7 +138,12 @@ const allocate = (quantity: number, sources: FulfillmentSource[]) => {
   for (const source of sources) {
     if (remaining <= 0) break;
     const allocated = Math.min(remaining, source.availableQuantity);
-    fulfillment.push({ ...source, quantity: allocated });
+    fulfillment.push({
+      productId: source.productId,
+      locationCode: source.locationCode,
+      quantity: allocated,
+      availableQuantity: source.availableQuantity,
+    });
     remaining -= allocated;
   }
 
@@ -115,6 +151,32 @@ const allocate = (quantity: number, sources: FulfillmentSource[]) => {
 };
 
 const totalAvailable = (sources: FulfillmentSource[]) => sources.reduce((sum, source) => sum + source.availableQuantity, 0);
+
+const sourceMetadataFor = (inventory: InventoryRuleRecord[]): InventorySourceMetadata[] => {
+  const bySource = new Map<string, InventorySourceMetadata>();
+
+  for (const record of inventory) {
+    const metadata = {
+      sourceName: getSourceName(record),
+      sourceVersion: getSourceVersion(record),
+      refreshedAt: getRefreshedAt(record),
+    };
+    const key = `${metadata.sourceName}:${metadata.sourceVersion}`;
+    const existing = bySource.get(key);
+    if (!existing || metadata.refreshedAt > existing.refreshedAt) bySource.set(key, metadata);
+  }
+
+  return [...bySource.values()].sort((left, right) => left.sourceName.localeCompare(right.sourceName));
+};
+
+const warehouseRefreshTimestampsFor = (inventory: InventoryRuleRecord[]): WarehouseRefreshTimestamp[] =>
+  inventory.map((record) => ({
+    productId: record.productId,
+    locationCode: record.locationCode,
+    refreshedAt: getRefreshedAt(record),
+    sourceName: getSourceName(record),
+    sourceVersion: getSourceVersion(record),
+  }));
 
 const findSeededReplacements = (product: InventoryRuleProduct, replacementProducts: InventoryRuleProduct[]) =>
   replacementProducts.filter(
@@ -130,14 +192,17 @@ const buildReplacementProposal = (
   replacementInventory: InventoryRuleRecord[],
 ): ReplacementProposal | null => {
   for (const replacement of findSeededReplacements(product, replacementProducts)) {
-    const sources = sourcesFor(replacement.id, replacementInventory);
+    const inventory = replacementInventory.filter((record) => record.productId === replacement.id);
+    const sources = sourcesFor(replacement.id, inventory);
     if (totalAvailable(sources) >= quantity) {
       return {
         productId: replacement.id,
         sku: replacement.sku,
         name: replacement.name,
-        reason: `${replacement.sku} is seeded as a replacement for ${product.sku}.`,
+        reason: `${replacement.sku} is configured as a replacement for ${product.sku}.`,
         fulfillment: allocate(quantity, sources),
+        sourceMetadata: sourceMetadataFor(inventory),
+        warehouseRefreshTimestamps: warehouseRefreshTimestampsFor(inventory),
       };
     }
   }
@@ -154,6 +219,8 @@ export const evaluateInventory = (input: EvaluateInventoryInput): InventoryDecis
   const staleRecords = productInventory.filter((record) => isStale(record, now, staleAfterHours));
   const sources = sourcesFor(input.product.id, productInventory);
   const availableQuantity = totalAvailable(sources);
+  const sourceMetadata = sourceMetadataFor(productInventory);
+  const warehouseRefreshTimestamps = warehouseRefreshTimestampsFor(productInventory);
   const laterDeliveryOptions = [
     {
       productId: input.product.id,
@@ -169,6 +236,8 @@ export const evaluateInventory = (input: EvaluateInventoryInput): InventoryDecis
     availableQuantity,
     staleRecords,
     laterDeliveryOptions,
+    sourceMetadata,
+    warehouseRefreshTimestamps,
   };
 
   if (staleRecords.length > 0) {
@@ -188,7 +257,14 @@ export const evaluateInventory = (input: EvaluateInventoryInput): InventoryDecis
       ...base,
       status: "single_warehouse",
       blocked: false,
-      fulfillment: [{ ...singleWarehouse, quantity: input.quantity }],
+      fulfillment: [
+        {
+          productId: singleWarehouse.productId,
+          locationCode: singleWarehouse.locationCode,
+          quantity: input.quantity,
+          availableQuantity: singleWarehouse.availableQuantity,
+        },
+      ],
       replacementProposal: null,
       reason: null,
     };
@@ -222,7 +298,6 @@ export const evaluateInventory = (input: EvaluateInventoryInput): InventoryDecis
     input.replacementProducts ?? [],
     input.replacementInventory ?? [],
   );
-
   if (replacementProposal) {
     return {
       ...base,
@@ -230,7 +305,7 @@ export const evaluateInventory = (input: EvaluateInventoryInput): InventoryDecis
       blocked: false,
       fulfillment: [],
       replacementProposal,
-      reason: "Requested product has insufficient inventory; propose the seeded replacement product.",
+      reason: "Requested product has insufficient inventory; propose the configured replacement product.",
     };
   }
 
