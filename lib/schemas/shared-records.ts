@@ -96,6 +96,8 @@ export const discountPolicyRecordSchema = z.object({
   discount_bps: z.number().int().min(0).max(10000),
   max_discount_bps: z.number().int().min(0).max(10000),
   amount_off: z.number().nonnegative(),
+  conditions: jsonObjectSchema.default({}),
+  minimum_margin_bps: z.number().int().min(0).max(10000).default(0),
   starts_on: dateSchema.nullable(),
   ends_on: dateSchema.nullable(),
   active: z.boolean(),
