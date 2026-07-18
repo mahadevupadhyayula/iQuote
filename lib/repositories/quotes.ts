@@ -54,6 +54,19 @@ export const createQuotesRepository = (client: RepositoryClient) => ({
     return quoteRecordSchema.array().parse(data ?? []);
   },
 
+  async createQuote(input: QuoteCreateInput) {
+    const { data, error } = await client.from("quotes").insert(input).select("*").single();
+    throwRepositoryError("Create quote", error);
+    return quoteRecordSchema.parse(data);
+  },
+
+  async addItems(quoteId: string, items: Omit<QuoteItemCreateInput, "quote_id">[]) {
+    if (items.length === 0) return [];
+    const { data, error } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quoteId }))).select("*");
+    throwRepositoryError("Add quote items", error);
+    return quoteItemRecordSchema.array().parse(data ?? []);
+  },
+
   async create(input: QuoteCreateInput, items: QuoteItemCreateInput[] = []) {
     const { data, error } = await client.from("quotes").insert(input).select("*").single();
     throwRepositoryError("Create quote", error);
@@ -86,6 +99,12 @@ export const createQuotesRepository = (client: RepositoryClient) => ({
   async updateStatus(id: string, status: QuoteStatus, timestamps: Partial<Pick<QuoteRecord, "submitted_at" | "approved_at" | "sent_at" | "accepted_at">> = {}) {
     const { data, error } = await client.from("quotes").update({ status, ...timestamps }).eq("id", id).select("*").single();
     throwRepositoryError("Update quote status", error);
+    return quoteRecordSchema.parse(data);
+  },
+
+  async markCompleted(id: string, completedAt = new Date().toISOString()) {
+    const { data, error } = await client.from("quotes").update({ completed_at: completedAt }).eq("id", id).select("*").single();
+    throwRepositoryError("Mark quote completed", error);
     return quoteRecordSchema.parse(data);
   },
 });

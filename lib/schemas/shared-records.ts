@@ -48,7 +48,12 @@ export const priceRecordSchema = z.object({
   created_at: timestampSchema,
 });
 
-export const inventoryRecordSchema = z.object({
+export const inventoryRecordSchema = z.preprocess((value) => {
+  if (value && typeof value === "object" && !("location_code" in value) && "warehouse_code" in value) {
+    return { ...value, location_code: (value as { warehouse_code: unknown }).warehouse_code };
+  }
+  return value;
+}, z.object({
   id: uuidSchema,
   product_id: uuidSchema,
   location_code: z.string().min(1),
@@ -56,7 +61,7 @@ export const inventoryRecordSchema = z.object({
   quantity_reserved: z.number().nonnegative(),
   reorder_point: z.number().nonnegative(),
   updated_at: timestampSchema,
-});
+}));
 
 export const discountPolicyRecordSchema = z.object({
   id: uuidSchema,

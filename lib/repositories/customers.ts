@@ -20,10 +20,14 @@ export const createCustomersRepository = (client: RepositoryClient) => ({
     return data ? customerRecordSchema.parse(data) : null;
   },
 
-  async searchByName(query: string, limit = 20) {
-    const { data, error } = await client.from("customers").select("*").ilike("name", `%${query}%`).order("name").limit(limit);
-    throwRepositoryError("Search customers", error);
+  async findByName(name: string, limit = 20) {
+    const { data, error } = await client.from("customers").select("*").ilike("name", `%${name}%`).order("name").limit(limit);
+    throwRepositoryError("Find customer by name", error);
     return customerRecordSchema.array().parse(data ?? []);
+  },
+
+  async searchByName(query: string, limit = 20) {
+    return this.findByName(query, limit);
   },
 
   async create(input: CustomerCreateInput) {

@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type RepositoryClient = SupabaseClient<any>;
+import type { Database } from "@/lib/db/types";
+
+export type RepositoryClient = SupabaseClient<Database>;
 
 export type RepositoryError = {
   message: string;
@@ -8,6 +10,8 @@ export type RepositoryError = {
   details?: string;
   hint?: string;
 };
+
+export const isUniqueViolation = (error: RepositoryError | null) => error?.code === "23505";
 
 export const throwRepositoryError = (operation: string, error: RepositoryError | null) => {
   if (error) {
