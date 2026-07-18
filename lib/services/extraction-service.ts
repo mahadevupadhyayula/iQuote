@@ -30,16 +30,19 @@ const toStoredExtraction = (extraction: ExtractionOutput) => ({
   source_text: extraction.source_text,
   fields: {
     customer_name: extraction.customer_name,
-    customer_email: extraction.customer_email,
     opportunity_name: extraction.opportunity_name,
-    currency_code: extraction.currency_code,
-    requested_valid_until: extraction.requested_valid_until,
-    lines: extraction.lines,
+    requested_items: extraction.requested_items,
+    delivery_location: extraction.delivery_location,
+    delivery_date: extraction.delivery_date,
+    requested_discount: extraction.requested_discount,
+    installation_requirement: extraction.installation_requirement,
+    special_requirements: extraction.special_requirements,
+    ambiguities: extraction.ambiguities,
+    overall_confidence: extraction.overall_confidence,
   },
   field_confidence: extraction.field_confidence,
   missing_fields: extraction.missing_fields,
   clarification_questions: extraction.clarification_questions,
-  source_spans: extraction.source_spans,
   extracted_at: new Date().toISOString(),
 });
 
@@ -71,8 +74,8 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
       const normalizedExtraction = { ...extraction, clarification_questions: clarificationQuestions };
 
       const updatedQuote = await quotesRepository.update(quoteId, {
-        currency_code: extraction.currency_code.value ?? quote.currency_code,
-        valid_until: extraction.requested_valid_until.value ?? quote.valid_until,
+        currency_code: quote.currency_code,
+        valid_until: extraction.delivery_date.value ?? quote.valid_until,
         metadata: {
           ...extractingQuote.metadata,
           extraction: { ...toStoredExtraction(normalizedExtraction), status: "completed" },
