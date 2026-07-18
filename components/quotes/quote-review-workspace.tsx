@@ -49,11 +49,13 @@ function ConfidenceBadge({ value }: { value: number | null }) {
 
 function OriginalRequestCard({ quote }: Props) {
   const extraction = quote.reviewMetadata;
+  const failure = asObject(extraction.extraction.failure);
   return <Card>
     <CardHeader><CardTitle>Original Request</CardTitle></CardHeader>
     <CardContent className="space-y-3">
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm leading-6 text-slate-800">{text(extraction.originalRequestText, "No original request was stored. Use the manual-entry fields below to reconstruct the request before configuration.")}</div>
       <div className="flex items-center justify-between text-xs text-slate-500"><span>Extraction status: {text(extraction.extractionStatus, "not run")}</span><ConfidenceBadge value={confidencePercent(asObject(extraction.extractionFields).overall_confidence)} /></div>
+      {extraction.manualEntry.enabled ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div className="font-semibold">Manual entry path enabled</div><p>{text(failure.summary, "Use the editable requirements and line-item fields to reconstruct the quote request before configuration.")}</p><p className="mt-1 text-xs">Failure category: {text(extraction.manualEntry.reason === "extraction_failed" ? failure.category : extraction.manualEntry.reason, "manual_review")}</p></div> : null}
     </CardContent>
   </Card>;
 }

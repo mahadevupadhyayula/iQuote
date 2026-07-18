@@ -17,6 +17,7 @@ type ExtractionSummary = {
   ambiguityCount: number;
   missingFieldCount: number;
 };
+type ManualFallbackState = { enabled: boolean; reason: string | null; category: string | null; summary: string | null };
 
 export type IntakeActionState =
   | {
@@ -31,6 +32,7 @@ export type IntakeActionState =
       missingFields: string[];
       clarificationQuestions: ClarificationQuestion[];
       manualFallback: boolean;
+      manualFallbackState: ManualFallbackState;
       suggestions: string[];
       previewLines: PreviewLine[];
     }
@@ -155,6 +157,8 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
     const missingFields = extraction?.missing_fields ?? ["requested_items", "delivery_date", "delivery_location"];
     const clarificationQuestions = extraction?.clarification_questions ?? missingFields.map((field) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
 
+    const failure = "failure" in extractionResult ? extractionResult.failure : null;
+
     return {
       ok: true,
       quoteId: quote.id,
@@ -172,6 +176,12 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
       missingFields,
       clarificationQuestions,
       manualFallback: !extraction,
+      manualFallbackState: {
+        enabled: !extraction,
+        reason: extraction ? null : "extraction_failed",
+        category: failure?.category ?? null,
+        summary: failure?.summary ?? null,
+      },
       suggestions: toSuggestions(missingFields, clarificationQuestions),
       previewLines: extraction?.requested_items.map((line) => ({
         sku: line.requested_sku.value,
@@ -179,10 +189,10 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
         quantity: line.quantity.value,
       })) ?? [],
     };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Unable to create the draft quote.",
+      error: "Unable to create the draft quote. Please use manual entry and try again later.",
       manualFallback: true,
       suggestions: ["Save the request details offline, create the quote manually, and retry extraction once services recover."],
     };
