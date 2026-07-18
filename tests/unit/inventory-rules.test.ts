@@ -32,6 +32,23 @@ const inventory = (overrides: Partial<InventoryRuleRecord>): InventoryRuleRecord
 });
 
 describe("inventory rules", () => {
+  it("fulfills available inventory from one warehouse", () => {
+    const result = evaluateInventory({
+      product,
+      quantity: 3,
+      now,
+      inventory: [
+        inventory({ locationCode: "DEN-01", quantityOnHand: 5, quantityReserved: 1 }),
+        inventory({ locationCode: "SEA-01", quantityOnHand: 2, quantityReserved: 0 }),
+      ],
+    });
+
+    expect(result.status).toBe("single_warehouse");
+    expect(result.blocked).toBe(false);
+    expect(result.availableQuantity).toBe(6);
+    expect(result.fulfillment).toEqual([{ productId: product.id, locationCode: "DEN-01", quantity: 3, availableQuantity: 4 }]);
+  });
+
   it("handles scenario A split fulfillment across seeded warehouses", () => {
     const result = evaluateInventory({
       product,
@@ -75,6 +92,26 @@ describe("inventory rules", () => {
         reason: "Offer a later ship date after warehouse replenishment or transfer.",
       },
     ]);
+  });
+
+  it("blocks insufficient inventory when no warehouse, split, or replacement option can satisfy the request", () => {
+    const result = evaluateInventory({
+      product,
+      quantity: 9,
+      now,
+      inventory: [
+        inventory({ locationCode: "DEN-01", quantityOnHand: 3, quantityReserved: 1 }),
+        inventory({ locationCode: "SEA-01", quantityOnHand: 2, quantityReserved: 0 }),
+      ],
+      replacementProducts: [replacement],
+      replacementInventory: [inventory({ productId: replacement.id, locationCode: "DEN-01", quantityOnHand: 3, quantityReserved: 0 })],
+    });
+
+    expect(result.status).toBe("backordered");
+    expect(result.blocked).toBe(true);
+    expect(result.availableQuantity).toBe(4);
+    expect(result.fulfillment).toEqual([]);
+    expect(result.reason).toBe("Insufficient warehouse inventory for the requested quantity.");
   });
 
   it("proposes a seeded replacement product when requested inventory is insufficient", async () => {

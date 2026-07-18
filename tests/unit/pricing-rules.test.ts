@@ -89,10 +89,21 @@ describe("pricing rules", () => {
     expect(result.provenance.precedenceRank).toBe(pricingPrecedence.listPrice);
   });
 
-  it("ignores expired and future-dated prices", () => {
+  it("ignores expired customer-specific prices and falls back to customer-tier pricing", () => {
     const result = resolve({
       customerSpecificPrices: [
         { ...source, id: "expired-customer-price", customerId: "cust-1", unitPrice: 60, unitCost: 40, effectiveTo: "2026-07-17" },
+      ],
+      customerTierPrices: [{ ...source, id: "tier-price-1", customerTier: "gold", unitPrice: 82, unitCost: 60 }],
+    });
+
+    expect(result.unitPriceCents).toBe(8200);
+    expect(result.provenance.price_id).toBe("tier-price-1");
+  });
+
+  it("ignores future-dated customer-specific prices and falls back to customer-tier pricing", () => {
+    const result = resolve({
+      customerSpecificPrices: [
         { ...source, id: "future-customer-price", customerId: "cust-1", unitPrice: 61, unitCost: 41, effectiveFrom: "2026-07-19" },
       ],
       customerTierPrices: [{ ...source, id: "tier-price-1", customerTier: "gold", unitPrice: 82, unitCost: 60 }],

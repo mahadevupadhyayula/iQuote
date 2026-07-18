@@ -115,6 +115,38 @@ describe("quote readiness rules", () => {
     });
   });
 
+  it("returns blocked when margin policy fails the configured floor", () => {
+    const result = evaluateQuoteReadiness({
+      ...baseInput(),
+      marginPolicy: { passes: false, grossMarginBps: 2400, floorBps: 2500 },
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers).toContainEqual({
+      code: "margin_policy_failed",
+      message: "Projected margin of 2400 bps is below the 2500 bps floor.",
+    });
+  });
+
+  it("returns blocked when approval policy rejects or blocks the quote", () => {
+    const result = evaluateQuoteReadiness({
+      ...baseInput(),
+      discountPolicyEvaluation: {
+        ...baseInput().discountPolicyEvaluation!,
+        blocked: true,
+        reason: "Requested discount exceeds delegated authority.",
+      },
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers).toContainEqual({
+      code: "blocking_exception",
+      message: "Requested discount exceeds delegated authority.",
+    });
+  });
+
   it("returns needs_information with missing required information", () => {
     const result = evaluateQuoteReadiness({
       ...baseInput(),
