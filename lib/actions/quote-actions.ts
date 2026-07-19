@@ -100,14 +100,15 @@ const quoteSummary = (quote: QuoteRecord & { items?: QuoteItemRecord[] }) => ({
 
 const lineTotals = (lines: Pick<QuoteItemCreateInput, "quantity" | "unit_price" | "discount_bps">[]) => {
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
-  const discount = lines.reduce((sum, line) => sum + (line.quantity * line.unit_price * line.discount_bps) / 10_000, 0);
+  const discount = lines.reduce((sum, line) => sum + (line.quantity * line.unit_price * (line.discount_bps ?? 0)) / 10_000, 0);
   return { subtotal: money(subtotal), discount: money(discount), total: money(subtotal - discount) };
 };
 
 const toQuoteItems = (lines: NonNullable<ApplyRepCorrectionsActionInput["lines"]> = []): Omit<QuoteItemCreateInput, "quote_id">[] =>
   lines.map((line, index) => {
     const subtotal = line.quantity * (line.unit_price ?? 0);
-    const discount = (subtotal * line.discount_bps) / 10_000;
+    const discountBps = line.discount_bps ?? 0;
+    const discount = (subtotal * discountBps) / 10_000;
     return {
       product_id: line.product_id ?? null,
       line_number: index + 1,
@@ -115,10 +116,10 @@ const toQuoteItems = (lines: NonNullable<ApplyRepCorrectionsActionInput["lines"]
       description: line.description,
       quantity: line.quantity,
       unit_price: money(line.unit_price ?? 0),
-      discount_bps: line.discount_bps,
+      discount_bps: discountBps,
       discount_amount: money(discount),
       line_total_amount: money(subtotal - discount),
-      metadata: line.metadata,
+      metadata: line.metadata ?? {},
     };
   });
 

@@ -65,7 +65,7 @@ describe("createProductMatchingService", () => {
     const result = await createProductMatchingService({ productsRepository, client, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" });
 
     expect(result).toMatchObject({ product: candidate, method: "ai_suggestion", ambiguous: true, requiresRepConfirmation: true });
-    const request = vi.mocked(client.responses.create).mock.calls[0][0] as ProductMatchingRequest;
+    const request = vi.mocked(client.responses.create).mock.calls[0][0] as unknown as ProductMatchingRequest;
     const payload = JSON.parse(request.input[1].content[0].text as string);
     expect(payload).toEqual({
       extracted_line: { lineNumber: 1, description: "pump" },

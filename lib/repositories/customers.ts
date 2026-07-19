@@ -31,13 +31,13 @@ export const createCustomersRepository = (client: RepositoryClient) => ({
   },
 
   async create(input: CustomerCreateInput) {
-    const { data, error } = await client.from("customers").insert(input).select("*").single();
+    const { data, error } = await client.from("customers").insert(input as never).select("*").single();
     throwRepositoryError("Create customer", error);
     return customerRecordSchema.parse(data);
   },
 
   async update(id: string, input: CustomerUpdateInput) {
-    const { data, error } = await client.from("customers").update(input).eq("id", id).select("*").single();
+    const { data, error } = await client.from("customers").update(input as never).eq("id", id).select("*").single();
     throwRepositoryError("Update customer", error);
     return customerRecordSchema.parse(data);
   },

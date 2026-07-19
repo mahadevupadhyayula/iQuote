@@ -31,6 +31,7 @@ export type CrmAccount = {
 export type CrmOpportunity = {
   id: string;
   accountId: string;
+  externalId: string | null;
   name: string;
   stage: "prospecting" | "qualification" | "proposal" | "negotiation" | "closed_won" | "closed_lost";
   ownerId: string | null;

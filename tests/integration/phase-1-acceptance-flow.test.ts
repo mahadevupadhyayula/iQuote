@@ -39,6 +39,7 @@ const buildQuote = (status: QuoteStatus, contract: (typeof demoScenarioContracts
   approved_at: null,
   sent_at: null,
   accepted_at: null,
+  sla_due_at: null,
   metadata: { grossMarginBps: totals.grossMarginBps },
   created_at: now,
   updated_at: now,

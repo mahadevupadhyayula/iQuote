@@ -57,7 +57,7 @@ export const createApprovalsRepository = (client: RepositoryClient) => ({
 
     const { data, error } = await client
       .from("approvals")
-      .insert({ ...input, approval_type: approvalType, status: "pending" })
+      .insert({ ...input, approval_type: approvalType, status: "pending" } as never)
       .select("*")
       .single();
     if (isUniqueViolation(error)) {

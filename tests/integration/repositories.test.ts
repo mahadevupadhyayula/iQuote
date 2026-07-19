@@ -122,7 +122,7 @@ describe("repository integration contracts", () => {
   });
 
   it("persists quotes with quote items", async () => {
-    const quote = await createQuotesRepository(createClient(db) as never).create({ id: uuid("501"), customer_id: uuid("1"), opportunity_id: null, quote_number: "Q-INT-1", status: "draft", currency_code: "USD", subtotal_amount: 5120, discount_amount: 0, tax_amount: 0, total_amount: 5120, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, metadata: {} }, [{ id: uuid("502"), quote_id: uuid("501"), product_id: uuid("200"), line_number: 1, sku: "AX-200", description: "AX-200", quantity: 4, unit_price: 1280, discount_bps: 0, discount_amount: 0, line_total_amount: 5120, metadata: {} }]);
+    const quote = await createQuotesRepository(createClient(db) as never).create({ id: uuid("501"), customer_id: uuid("1"), opportunity_id: null, quote_number: "Q-INT-1", status: "draft", currency_code: "USD", subtotal_amount: 5120, discount_amount: 0, tax_amount: 0, total_amount: 5120, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, sla_due_at: null, metadata: {} }, [{ id: uuid("502"), quote_id: uuid("501"), product_id: uuid("200"), line_number: 1, sku: "AX-200", description: "AX-200", quantity: 4, unit_price: 1280, discount_bps: 0, discount_amount: 0, line_total_amount: 5120, metadata: {} }]);
     expect(quote.items).toHaveLength(1);
     expect(quote.items[0]).toMatchObject({ quote_id: uuid("501"), sku: "AX-200" });
   });
