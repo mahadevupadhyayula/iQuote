@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
 
+export const dynamic = "force-dynamic";
+
 const currency = (amount: number, code = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(
     amount,

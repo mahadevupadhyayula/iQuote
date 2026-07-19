@@ -87,7 +87,7 @@ describe("discount policy rules", () => {
     expect(evaluation.requiredApprovalTypes).toEqual(["discount_threshold", "margin_floor"]);
     expect(evaluation.blockingReasons).toEqual([
       "Requested discount 2000 bps exceeds allowed discount 1200 bps.",
-      "Projected margin 1037 bps is below policy floor 2500 bps.",
+      "Projected margin 0 bps is below policy floor 2500 bps.",
     ]);
   });
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
+import type { FieldErrors, Resolver, SubmitHandler } from "react-hook-form";
 import {
   AlertCircle,
   CheckCircle2,
@@ -49,7 +50,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-type FormErrors = Partial<Record<keyof QuoteIntakeInput, { message?: string }>>;
+type FormErrors = FieldErrors<QuoteIntakeInput>;
 
 type RecentActivityItem = {
   id: string;
@@ -62,14 +63,14 @@ type QuoteIntakeFormProps = {
   recentActivity?: RecentActivityItem[];
 };
 
-const resolver = async (values: QuoteIntakeInput) => {
+const resolver: Resolver<QuoteIntakeInput> = async (values) => {
   const result = quoteIntakeSchema.safeParse(values);
   if (result.success) return { values: result.data, errors: {} };
   return {
     values: {},
     errors: result.error.issues.reduce<FormErrors>((errors, issue) => {
       const name = issue.path[0] as keyof QuoteIntakeInput;
-      errors[name] = { message: issue.message };
+      errors[name] = { type: "manual", message: issue.message };
       return errors;
     }, {}),
   };
@@ -136,7 +137,7 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
     }
   };
 
-  const onSubmit = (values: QuoteIntakeInput) => {
+  const onSubmit: SubmitHandler<QuoteIntakeInput> = (values) => {
     setResult(null);
     startTransition(async () => setResult(await submitQuoteIntake(values)));
   };

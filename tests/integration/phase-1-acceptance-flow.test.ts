@@ -16,7 +16,10 @@ const quoteId = "91000000-0000-4000-8000-000000000001";
 const eventId = "92000000-0000-4000-8000-000000000001";
 
 const inventoryBySku: Record<string, Parameters<typeof evaluateInventory>[0]["inventory"]> = {
-  "AX-200": [{ productId: "20000000-0000-4000-8000-000000000200", locationCode: "CHI-01", quantityOnHand: 12, quantityReserved: 2, reorderPoint: 4, updatedAt: now, refreshedAt: now }],
+  "AX-200": [
+    { productId: "20000000-0000-4000-8000-000000000200", locationCode: "CHI-01", quantityOnHand: 12, quantityReserved: 2, reorderPoint: 4, updatedAt: now, refreshedAt: now },
+    { productId: "20000000-0000-4000-8000-000000000200", locationCode: "DAL-02", quantityOnHand: 8, quantityReserved: 0, reorderPoint: 3, updatedAt: now, refreshedAt: now },
+  ],
   "HX-500": [
     { productId: "20000000-0000-4000-8000-000000000500", locationCode: "SEA-01", quantityOnHand: 4, quantityReserved: 0, reorderPoint: 2, updatedAt: now, refreshedAt: now },
     { productId: "20000000-0000-4000-8000-000000000500", locationCode: "DEN-01", quantityOnHand: 3, quantityReserved: 1, reorderPoint: 2, updatedAt: now, refreshedAt: now },
@@ -39,6 +42,7 @@ const buildQuote = (status: QuoteStatus, contract: (typeof demoScenarioContracts
   approved_at: null,
   sent_at: null,
   accepted_at: null,
+  sla_due_at: null,
   metadata: { grossMarginBps: totals.grossMarginBps },
   created_at: now,
   updated_at: now,

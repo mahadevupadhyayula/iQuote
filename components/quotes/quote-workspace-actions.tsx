@@ -49,7 +49,12 @@ export function FulfillmentButton({ quote, lineNumber }: Props & { lineNumber: n
   const [pending, startTransition] = useTransition();
   const line = quote.lines.find((item) => item.lineNumber === lineNumber);
   const productId = line?.productId;
-  return <Button variant="outline" size="sm" disabled={pending || !productId} onClick={() => productId && startTransition(() => selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber, fulfillment: [{ productId, locationCode: "AUTO", quantity: line.quantity, availableQuantity: line.quantity }] }))}>{pending ? "Saving..." : "Use recommended"}</Button>;
+  return <Button variant="outline" size="sm" disabled={pending || !productId} onClick={() => {
+    if (!productId) return;
+    startTransition(async () => {
+      await selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber, fulfillment: [{ productId, locationCode: "AUTO", quantity: line.quantity, availableQuantity: line.quantity }] });
+    });
+  }}>{pending ? "Saving..." : "Use recommended"}</Button>;
 }
 
 export function QuoteWorkflowActions({ quote }: Props) {

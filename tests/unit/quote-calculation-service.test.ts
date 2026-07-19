@@ -32,7 +32,7 @@ describe("quote calculation service", () => {
         sellPriceCents: 1_177_600,
         costCents: 820_000,
         grossProfitCents: 357_600,
-        grossMarginBps: 3_036,
+        grossMarginBps: 3_037,
         marginFloorPasses: true,
       },
       {

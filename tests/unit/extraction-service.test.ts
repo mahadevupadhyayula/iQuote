@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 vi.mock("server-only", () => ({}));
 
@@ -62,16 +63,16 @@ describe("createExtractionService failure fallback", () => {
   beforeEach(() => vi.useRealTimers());
 
   it("preserves the draft quote and enables manual entry for malformed model responses", async () => {
-    const { service, workflowEventsRepository, storedQuote } = buildHarness(new SyntaxError("Unexpected token super-secret-api-key"));
+    const harness = buildHarness(new SyntaxError("Unexpected token super-secret-api-key"));
 
-    const result = await service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
+    const result = await harness.service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
 
     expect(result.extraction).toBeNull();
     expect(result.failure).toMatchObject({ category: "malformed_response", summary: expect.stringContaining("could not be read") });
-    expect(storedQuote.metadata).toMatchObject({ existing: "preserved", manual_entry: { enabled: true, reason: "extraction_failed", failure_category: "malformed_response" } });
-    expect((storedQuote.metadata as Record<string, unknown>).extraction).toMatchObject({ status: "failed", source_text: "Need scanners", failure: { category: "malformed_response", recoverable: true } });
-    expect(JSON.stringify(storedQuote.metadata)).not.toContain("super-secret-api-key");
-    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({
+    expect(harness.storedQuote.metadata).toMatchObject({ existing: "preserved", manual_entry: { enabled: true, reason: "extraction_failed", failure_category: "malformed_response" } });
+    expect((harness.storedQuote.metadata as Record<string, unknown>).extraction).toMatchObject({ status: "failed", source_text: "Need scanners", failure: { category: "malformed_response", recoverable: true } });
+    expect(JSON.stringify(harness.storedQuote.metadata)).not.toContain("super-secret-api-key");
+    expect(harness.workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({
       event_type: "extraction_failed",
       from_status: "extracting",
       to_status: "needs_information",
@@ -80,21 +81,21 @@ describe("createExtractionService failure fallback", () => {
   });
 
   it("classifies timeouts without exposing the adapter error message", async () => {
-    const { service, storedQuote } = buildHarness(new Error("OpenAI request timed out with token sk-live-secret"));
+    const harness = buildHarness(new Error("OpenAI request timed out with token sk-live-secret"));
 
-    const result = await service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
+    const result = await harness.service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
 
     expect(result.failure?.category).toBe("timeout");
-    expect(storedQuote.status).toBe("needs_information");
-    expect(JSON.stringify(storedQuote.metadata)).not.toContain("sk-live-secret");
+    expect(harness.storedQuote.status).toBe("needs_information");
+    expect(JSON.stringify(harness.storedQuote.metadata)).not.toContain("sk-live-secret");
   });
 
   it("classifies Zod parse failures and returns manual fallback metadata", async () => {
-    const { service, storedQuote } = buildHarness({ source_text: "Need scanners" });
+    const harness = buildHarness(new ZodError([]));
 
-    const result = await service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
+    const result = await harness.service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
 
     expect(result).toMatchObject({ extraction: null, failure: { category: "schema_validation", summary: expect.stringContaining("required schema") } });
-    expect((storedQuote.metadata as Record<string, unknown>).manual_entry).toMatchObject({ enabled: true, failure_category: "schema_validation" });
+    expect((harness.storedQuote.metadata as Record<string, unknown>).manual_entry).toMatchObject({ enabled: true, failure_category: "schema_validation" });
   });
 });

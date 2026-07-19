@@ -31,7 +31,7 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Net line total | `471040` cents (`512000 - 40960`) |
 | Extended cost | `328000` cents (`82000 * 4`) |
 | Gross profit | `143040` cents (`471040 - 328000`) |
-| Gross margin percentage or basis points | `3036` bps (`round(143040 * 10000 / 471040)`) |
+| Gross margin percentage or basis points | `3037` bps (`round(143040 * 10000 / 471040)`) |
 | Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total available `18` |
 | Approval result | `straight_through`; no required approval role |
 | Expected persisted quote status | `sent` after status path `draft` → `approved` → `sent` |
@@ -80,5 +80,5 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Gross margin percentage or basis points | `10000` bps (`2055000 * 10000 / 2055000`) |
 | Inventory source warehouse allocation | `SEA-01`: quantity `4` from `4` available; `DEN-01`: quantity `2` from `2` available; `split_fulfillment`; total available `6` |
 | Approval result | `straight_through` after inventory resolution; no required approval role |
-| Expected persisted quote status | `sent` after status path `draft` → `needs_information` → `approved` → `sent` |
+| Expected persisted quote status | `sent` after status path `draft` → `needs_information` → `configuring` → `approved` → `sent` |
 | Expected workflow event | `straight_through_after_inventory_resolution` |

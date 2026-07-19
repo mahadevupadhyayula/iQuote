@@ -71,7 +71,8 @@ describe("submitQuoteIntake manual fallback", () => {
     expect(JSON.stringify(result)).not.toContain("sk-secret");
     expect(result).toMatchObject({ slaStartedAt: "2026-07-18T12:00:00.000Z", slaDueAt: "2026-07-18T12:15:00.000Z" });
     expect(state.quote.sla_due_at).toBe("2026-07-18T12:15:00.000Z");
-    expect(state.quote.metadata.sla).toMatchObject({ started_at: "2026-07-18T12:00:00.000Z", due_at: "2026-07-18T12:15:00.000Z", policy_minutes: 15 });
-    expect(state.quote.metadata.manual_entry).toMatchObject({ enabled: true, failure_category: "timeout" });
+    const metadata = state.quote.metadata as Record<string, unknown>;
+    expect(metadata.sla).toMatchObject({ started_at: "2026-07-18T12:00:00.000Z", due_at: "2026-07-18T12:15:00.000Z", policy_minutes: 15 });
+    expect(metadata.manual_entry).toMatchObject({ enabled: true, failure_category: "timeout" });
   });
 });

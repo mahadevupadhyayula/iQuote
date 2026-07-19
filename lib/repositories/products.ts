@@ -83,7 +83,7 @@ export const createProductsRepository = (client: RepositoryClient) => {
     return productRecordSchema.array().parse(data ?? []);
   },
 
-  async findReplacement(productId: string) {
+  async findReplacement(productId: string): Promise<ProductRecord | null> {
     const substitutes = await this.listSubstitutes(productId);
     return substitutes[0] ?? null;
   },
@@ -99,13 +99,13 @@ export const createProductsRepository = (client: RepositoryClient) => {
   },
 
   async create(input: ProductCreateInput) {
-    const { data, error } = await client.from("products").insert(input).select("*").single();
+    const { data, error } = await client.from("products").insert(input as never).select("*").single();
     throwRepositoryError("Create product", error);
     return productRecordSchema.parse(data);
   },
 
   async update(id: string, input: ProductUpdateInput) {
-    const { data, error } = await client.from("products").update(input).eq("id", id).select("*").single();
+    const { data, error } = await client.from("products").update(input as never).eq("id", id).select("*").single();
     throwRepositoryError("Update product", error);
     return productRecordSchema.parse(data);
   },

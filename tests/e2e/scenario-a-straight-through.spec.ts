@@ -59,7 +59,7 @@ test.describe("scenario A: straight-through Atlas Manufacturing quote", () => {
 
     const pdfResponse = await request.get(new URL(`${page.url()}/pdf`).pathname);
     expect(pdfResponse.ok(), await pdfResponse.text()).toBeTruthy();
-    await expect(pdfResponse).toHaveHeader("content-type", /application\/pdf/i);
-    await expect(pdfResponse).toHaveHeader("content-disposition", /filename=.*\.pdf/i);
+    expect(pdfResponse.headers()["content-type"]).toMatch(/application\/pdf/i);
+    expect(pdfResponse.headers()["content-disposition"]).toMatch(/filename=.*\.pdf/i);
   });
 });

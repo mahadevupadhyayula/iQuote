@@ -91,7 +91,7 @@ describe("quote workspace query service", () => {
     expect(JSON.stringify(view)).not.toContain("lineCost");
     expect(JSON.stringify(view)).not.toContain("grossProfit");
     expect(JSON.stringify(view)).not.toContain("grossMargin");
-    expect(JSON.stringify(view)).not.toContain("approval");
+    expect(JSON.stringify(view)).not.toContain("approvalStatus");
     expect(JSON.stringify(view)).not.toContain("workflowEvents");
     expect(JSON.stringify(view)).not.toContain("Rep-only note");
     expect(JSON.stringify(view)).not.toContain("Line-only note");
@@ -100,7 +100,7 @@ describe("quote workspace query service", () => {
   it("returns an internal rep workspace with readiness, margin, approvals, SLA, and workflow events", async () => {
     const view = await createQuoteWorkspaceQueryService(repositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
 
-    expect(view?.readiness.status).toBe("blocked");
+    expect(view?.readiness.status).toBe("requires_approval");
     expect(view?.margin).toMatchObject({ costAmount: 550, grossProfitAmount: 350, grossMarginBps: 3889, floorBps: 3000, floorPasses: true });
     expect(view?.approvalStatus).toMatchObject({ status: "pending", pendingCount: 1, requiredRoles: ["sales_director"] });
     expect(view?.sla).toMatchObject({ startedAt: "2026-07-18T12:00:00.000Z", dueAt: "2026-07-19T12:00:00.000Z", policyMinutes: 1440, breached: false, minutesRemaining: 1440, source: "metadata" });

@@ -17,6 +17,7 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
 
     const inventory = await repositories.inventory.listByProduct(product.id);
     const locations = inventory.map((record) => ({
+      warehouseCode: record.location_code,
       locationCode: record.location_code,
       quantityOnHand: record.quantity_on_hand,
       quantityReserved: record.quantity_reserved,
@@ -31,6 +32,7 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
         reorderPoint: record.reorder_point,
       }),
       asOf: record.refreshed_at ?? record.updated_at,
+      refreshed_at: record.refreshed_at ?? record.updated_at,
       sourceName: record.source_name,
       sourceVersion: record.source_version,
     }));
@@ -42,9 +44,13 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
       unitOfMeasure: product.unit_of_measure,
       status: product.status,
       totalAvailableQuantity: locations.reduce((sum, location) => sum + location.availableQuantity, 0),
+      availableQuantity: locations.reduce((sum, location) => sum + location.availableQuantity, 0),
       availability: summarizeAvailability(locations),
+      warehouses: locations,
       locations,
-      sources: locations.map(({ sourceName, sourceVersion, asOf }) => ({ sourceName, sourceVersion, refreshedAt: asOf })),
+      sourceName: locations[0]?.sourceName ?? "demo_erp_inventory",
+      sourceVersion: locations[0]?.sourceVersion ?? "1",
+      refreshed_at: locations[0]?.refreshed_at ?? new Date(0).toISOString(),
     };
   };
 

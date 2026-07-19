@@ -17,8 +17,8 @@ const now = "2026-07-18T12:00:00.000Z";
 const onDate = "2026-07-18";
 
 const listPrices = [
-  { id: "price-ax-200", productId: demoProducts.ax200.id, currencyCode: "USD", unitPrice: 1280, effectiveFrom: "2026-01-01", effectiveTo: null, sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
-  { id: "price-hx-500", productId: demoProducts.hx500.id, currencyCode: "USD", unitPrice: 3425, effectiveFrom: "2026-01-01", effectiveTo: "2026-09-30", sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
+  { id: "price-ax-200", productId: demoProducts.ax200.id, currencyCode: "USD", unitPrice: 1280, unitCost: 820, effectiveFrom: "2026-01-01", effectiveTo: null, sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
+  { id: "price-hx-500", productId: demoProducts.hx500.id, currencyCode: "USD", unitPrice: 3425, unitCost: 0, effectiveFrom: "2026-01-01", effectiveTo: "2026-09-30", sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
 ];
 
 const inventory: InventoryRuleRecord[] = [
@@ -85,11 +85,23 @@ describe("demo scenario contracts", () => {
       currencyCode: contract.input.currencyCode,
       lines: [{ productId: product!.id, sku: product!.sku, description: product!.name, quantity: contract.input.line.quantity }],
       products,
-      prices: [{ productId: product!.id, unitPrice: contract.expected.price.unitPriceCents / 100, currencyCode: "USD", effectiveFrom: contract.expected.price.effectiveFrom, effectiveTo: contract.expected.price.effectiveTo }],
+      prices: [{
+        productId: product!.id,
+        unitPrice: contract.expected.price.unitPriceCents / 100,
+        unitCost: contract.input.line.unitCostCents / 100,
+        currencyCode: "USD",
+        sourceName: "supabase/seed.sql",
+        sourceVersion: "atlas-northstar",
+        effectiveFrom: contract.expected.price.effectiveFrom,
+        effectiveTo: contract.expected.price.effectiveTo,
+      }],
       inventoryDecisions: [inventoryDecision],
-      marginPolicy: evaluateMarginFloor({ sellPriceCents: calculation.sellPriceCents, costCents: calculation.costCents, floorBps: 3_000 }),
+      marginPolicy: evaluateMarginFloor({ sellPriceCents: calculation.sellPriceCents, costCents: calculation.costCents, floorBps: contract.id === "B" ? 2_500 : 3_000 }),
+      commercialCalculation: { subtotalAmount: calculation.subtotalCents / 100, discountAmount: calculation.discountAmountCents / 100, totalAmount: calculation.sellPriceCents / 100, grossMarginBps: calculation.grossMarginBps },
+      discountPolicyEvaluation: approval,
       approvals: contract.expected.discountDecision.requiredRole ? [{ requiredRole: contract.expected.discountDecision.requiredRole, status: "approved" }] : [],
       paymentTerms: { accepted: true, termsCode: "NET30" },
+      slaDueAt: contract.input.validUntil,
       onDate,
     });
     expect({ ready: readiness.ready, status: readiness.status, blockerCodes: readiness.blockers.map((blocker) => blocker.code) }).toEqual(contract.expected.readinessResult);

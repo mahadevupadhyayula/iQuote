@@ -189,7 +189,7 @@ const assertNoError = (label: string, error: { message: string } | null) => {
 };
 
 export const resetDemoData = async () => {
-  const supabase = createAdminSupabaseClient() as any;
+  const supabase: ReturnType<typeof createAdminSupabaseClient> = createAdminSupabaseClient();
   const productIds = demoProducts.map((product) => product.id);
   const customerIds = demoCustomers.map((customer) => customer.id);
 
@@ -200,12 +200,12 @@ export const resetDemoData = async () => {
   assertNoError("Delete demo products", (await supabase.from("products").delete().in("id", productIds)).error);
   assertNoError("Delete demo customers", (await supabase.from("customers").delete().in("id", customerIds)).error);
 
-  assertNoError("Insert demo customers", (await supabase.from("customers").insert(demoCustomers)).error);
-  assertNoError("Insert demo products", (await supabase.from("products").insert(demoProducts)).error);
-  assertNoError("Insert demo aliases", (await supabase.from("product_aliases").insert(productAliases)).error);
-  assertNoError("Insert demo prices", (await supabase.from("prices").insert(prices)).error);
-  assertNoError("Insert demo inventory", (await supabase.from("inventory").insert(inventory)).error);
-  assertNoError("Insert demo discount policies", (await supabase.from("discount_policies").insert(discountPolicies)).error);
+  assertNoError("Insert demo customers", (await supabase.from("customers").insert(demoCustomers as never)).error);
+  assertNoError("Insert demo products", (await supabase.from("products").insert(demoProducts as never)).error);
+  assertNoError("Insert demo aliases", (await supabase.from("product_aliases").insert(productAliases as never)).error);
+  assertNoError("Insert demo prices", (await supabase.from("prices").insert(prices as never)).error);
+  assertNoError("Insert demo inventory", (await supabase.from("inventory").insert(inventory as never)).error);
+  assertNoError("Insert demo discount policies", (await supabase.from("discount_policies").insert(discountPolicies as never)).error);
 
   return {
     customers: demoCustomers.length,

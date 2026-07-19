@@ -100,14 +100,15 @@ const quoteSummary = (quote: QuoteRecord & { items?: QuoteItemRecord[] }) => ({
 
 const lineTotals = (lines: Pick<QuoteItemCreateInput, "quantity" | "unit_price" | "discount_bps">[]) => {
   const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
-  const discount = lines.reduce((sum, line) => sum + (line.quantity * line.unit_price * line.discount_bps) / 10_000, 0);
+  const discount = lines.reduce((sum, line) => sum + (line.quantity * line.unit_price * (line.discount_bps ?? 0)) / 10_000, 0);
   return { subtotal: money(subtotal), discount: money(discount), total: money(subtotal - discount) };
 };
 
 const toQuoteItems = (lines: NonNullable<ApplyRepCorrectionsActionInput["lines"]> = []): Omit<QuoteItemCreateInput, "quote_id">[] =>
   lines.map((line, index) => {
     const subtotal = line.quantity * (line.unit_price ?? 0);
-    const discount = (subtotal * line.discount_bps) / 10_000;
+    const discountBps = line.discount_bps ?? 0;
+    const discount = (subtotal * discountBps) / 10_000;
     return {
       product_id: line.product_id ?? null,
       line_number: index + 1,
@@ -115,10 +116,10 @@ const toQuoteItems = (lines: NonNullable<ApplyRepCorrectionsActionInput["lines"]
       description: line.description,
       quantity: line.quantity,
       unit_price: money(line.unit_price ?? 0),
-      discount_bps: line.discount_bps,
+      discount_bps: discountBps,
       discount_amount: money(discount),
       line_total_amount: money(subtotal - discount),
-      metadata: line.metadata,
+      metadata: line.metadata ?? {},
     };
   });
 
@@ -150,6 +151,7 @@ export async function createQuoteDraft(input: CreateQuoteDraftActionInput) {
     approved_at: null,
     sent_at: null,
     accepted_at: null,
+    sla_due_at: null,
     metadata: data.metadata,
   });
   await repositories.workflowEvents.record({ quote_id: quote.id, event_type: "created", actor_id: data.actor_id ?? null, from_status: null, to_status: "draft", payload: { action: "create_quote_draft" } });
@@ -220,7 +222,13 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   });
   const inventoryDecision = await inventoryService.evaluateAvailability({ product, quantity: targetItem.quantity, allowSplitFulfillment: true });
   const items = quote.items.map((item) => item.line_number === data.line_number ? { ...item, metadata: { ...item.metadata, inventory_decision: inventoryDecision, selected_fulfillment: data.fulfillment } } : item);
-  await repositories.quotes.replaceItems(data.quote_id, items.map(({ id: _id, quote_id: _quoteId, created_at: _createdAt, ...item }) => item));
+  const replacementItems = items.map((item): QuoteItemCreateInput => {
+    const { id, created_at, ...replacementItem } = item as QuoteItemRecord;
+    void id;
+    void created_at;
+    return replacementItem;
+  });
+  await repositories.quotes.replaceItems(data.quote_id, replacementItems);
   const updated = await repositories.quotes.update(data.quote_id, { metadata: { ...quote.metadata, fulfillment_selected_at: new Date().toISOString() } });
   await recordUpdate(updated, data.actor_id, "select_fulfillment", { line_number: data.line_number, fulfillment: data.fulfillment, inventory_decision: inventoryDecision });
   revalidatePath(quotePath(data.quote_id));

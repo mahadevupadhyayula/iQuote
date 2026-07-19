@@ -99,7 +99,7 @@ export const createPricesRepository = (client: RepositoryClient) => ({
   },
 
   async createDiscountPolicy(input: DiscountPolicyCreateInput) {
-    const { data, error } = await client.from("discount_policies").insert(input).select("*").single();
+    const { data, error } = await client.from("discount_policies").insert(input as never).select("*").single();
     throwRepositoryError("Create discount policy", error);
     return discountPolicyRecordSchema.parse(data);
   },

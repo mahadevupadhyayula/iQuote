@@ -21,7 +21,7 @@ The executable source of truth is `lib/demo/scenario-contracts.ts`; this documen
 - Expected approval path: `straight_through`.
 - Expected quote status path: `draft` → `approved` → `sent`.
 - Expected readiness result: `ready`, with no blockers.
-- Expected final totals: subtotal `512000` cents, discount `40960` cents, total `471040` cents, cost `328000` cents, gross profit `143040` cents, gross margin `3036` bps.
+- Expected final totals: subtotal `512000` cents, discount `40960` cents, total `471040` cents, cost `328000` cents, gross profit `143040` cents, gross margin `3037` bps.
 
 ## Scenario B — Atlas Manufacturing discount exception approval
 
@@ -45,6 +45,6 @@ The executable source of truth is `lib/demo/scenario-contracts.ts`; this documen
 - Expected inventory decision: `split_fulfillment`, not blocked, `6` total available, fulfilled from `SEA-01` with quantity `4` of `4` available and `DEN-01` with quantity `2` of `2` available.
 - Expected discount decision: `0` bps requested and approved; approval requirement `straight_through`.
 - Expected approval path: straight-through after inventory resolution.
-- Expected quote status path: `draft` → `needs_information` → `approved` → `sent`.
+- Expected quote status path: `draft` → `needs_information` → `configuring` → `approved` → `sent`.
 - Expected readiness result: `ready`, with no blockers after split fulfillment is saved.
 - Expected final totals: subtotal `2055000` cents, discount `0` cents, total `2055000` cents, cost `0` cents, gross profit `2055000` cents, gross margin `10000` bps.

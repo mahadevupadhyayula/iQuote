@@ -7,7 +7,7 @@ const customer = { id: "11111111-1111-4111-8111-111111111111", external_id: "C-1
 const product = { id: "22222222-2222-4222-8222-222222222222", sku: "SKU-1", name: "Widget", description: null, status: "active" as const, unit_of_measure: "ea", metadata: {}, created_at: timestamp, updated_at: timestamp };
 const price = { id: "33333333-3333-4333-8333-333333333333", product_id: product.id, currency_code: "USD", unit_price: 100, effective_from: "2026-01-01", effective_to: null, price_type: "list" as const, customer_tier: null, customer_id: null, unit_cost: 60, source_name: "manual", source_version: "1", created_at: timestamp };
 const discountPolicy = { id: "44444444-4444-4444-8444-444444444444", name: "Standard", description: null, policy_type: "percent_off" as const, discount_bps: 500, max_discount_bps: 1_000, amount_off: 0, conditions: {}, minimum_margin_bps: 2_000, starts_on: null, ends_on: null, active: true, metadata: {}, created_at: timestamp, updated_at: timestamp };
-const quote = { id: "55555555-5555-4555-8555-555555555555", opportunity_id: null, customer_id: customer.id, quote_number: "Q-1", status: "draft" as const, currency_code: "USD", subtotal_amount: 200, discount_amount: 10, tax_amount: 0, total_amount: 190, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, metadata: {}, created_at: timestamp, updated_at: timestamp };
+const quote = { id: "55555555-5555-4555-8555-555555555555", opportunity_id: null, customer_id: customer.id, quote_number: "Q-1", status: "draft" as const, currency_code: "USD", subtotal_amount: 200, discount_amount: 10, tax_amount: 0, total_amount: 190, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, sla_due_at: null, metadata: {}, created_at: timestamp, updated_at: timestamp };
 const updatedQuote = { ...quote, status: "approved" as const, approved_at: timestamp };
 const item = { id: "66666666-6666-4666-8666-666666666666", quote_id: quote.id, product_id: product.id, line_number: 1, sku: product.sku, description: product.name, quantity: 2, unit_price: 100, discount_bps: 500, discount_amount: 10, line_total_amount: 190, metadata: {}, created_at: timestamp };
 const event = { id: "77777777-7777-4777-8777-777777777777", quote_id: quote.id, event_type: "approved" as const, actor_id: null, from_status: "draft" as const, to_status: "approved" as const, payload: {}, created_at: timestamp, idempotency_key: null };
@@ -41,6 +41,6 @@ describe("quote foundation service", () => {
     expect(repo.workflowEvents.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "approved", payload: expect.objectContaining({ action: "phase_1_acceptance" }) }));
     expect(result).toMatchObject({ customer, quote: updatedQuote, items: [item], approvals: [], approvalEvaluation: { requirement: "straight_through" } });
     expect(result.lines[0].inventoryDecision.status).toBe("single_warehouse");
-    expect(result.calculation.grossMarginBps).toBe(6842);
+    expect(result.calculation.grossMarginBps).toBe(3684);
   });
 });

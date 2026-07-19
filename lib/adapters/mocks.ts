@@ -44,6 +44,8 @@ const toCrmAccount = (customer: CustomerRecord): CrmAccount => ({
   domain: customer.domain,
   billingEmail: customer.billing_email,
   phone: customer.phone,
+  sourceName: "supabase.customers",
+  sourceVersion: "demo",
 });
 
 export const createMockCrmAdapter = (repositories: Pick<Repositories, "customers">): CrmAdapter => ({
@@ -63,11 +65,14 @@ export const createMockCrmAdapter = (repositories: Pick<Repositories, "customers
       {
         id: `demo-opportunity-${account.id}`,
         accountId: account.id,
+        externalId: null,
         name: `${account.name} expansion quote`,
         stage: "proposal",
         ownerId: michaelAnderson.id,
         currencyCode: "USD",
         expectedCloseDate: null,
+        sourceName: "demo.crm",
+        sourceVersion: "demo",
       } satisfies CrmOpportunity,
     ];
   },

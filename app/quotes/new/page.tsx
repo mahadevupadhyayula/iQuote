@@ -3,6 +3,8 @@ import { QuoteIntakeForm } from "@/components/quotes/quote-intake-form";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewQuotePage() {
   const repositories = createRepositories(createServerSupabaseClient());
   const recentQuotes = await repositories.quotes.listRecent(4);

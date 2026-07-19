@@ -55,25 +55,25 @@ export const createQuotesRepository = (client: RepositoryClient) => ({
   },
 
   async createQuote(input: QuoteCreateInput) {
-    const { data, error } = await client.from("quotes").insert(input).select("*").single();
+    const { data, error } = await client.from("quotes").insert(input as never).select("*").single();
     throwRepositoryError("Create quote", error);
     return quoteRecordSchema.parse(data);
   },
 
   async addItems(quoteId: string, items: Omit<QuoteItemCreateInput, "quote_id">[]) {
     if (items.length === 0) return [];
-    const { data, error } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quoteId }))).select("*");
+    const { data, error } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quoteId })) as never).select("*");
     throwRepositoryError("Add quote items", error);
     return quoteItemRecordSchema.array().parse(data ?? []);
   },
 
   async create(input: QuoteCreateInput, items: QuoteItemCreateInput[] = []) {
-    const { data, error } = await client.from("quotes").insert(input).select("*").single();
+    const { data, error } = await client.from("quotes").insert(input as never).select("*").single();
     throwRepositoryError("Create quote", error);
     const quote = quoteRecordSchema.parse(data);
 
     if (items.length > 0) {
-      const { error: itemsError } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quote.id })));
+      const { error: itemsError } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quote.id })) as never);
       throwRepositoryError("Create quote items", itemsError);
     }
 
@@ -85,13 +85,13 @@ export const createQuotesRepository = (client: RepositoryClient) => ({
   async replaceItems(quoteId: string, items: Omit<QuoteItemCreateInput, "quote_id">[]) {
     throwRepositoryError("Delete quote items", (await client.from("quote_items").delete().eq("quote_id", quoteId)).error);
     if (items.length === 0) return [];
-    const { data, error } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quoteId }))).select("*");
+    const { data, error } = await client.from("quote_items").insert(items.map((item) => ({ ...item, quote_id: quoteId })) as never).select("*");
     throwRepositoryError("Replace quote items", error);
     return quoteItemRecordSchema.array().parse(data ?? []);
   },
 
   async update(id: string, input: QuoteUpdateInput) {
-    const { data, error } = await client.from("quotes").update(input).eq("id", id).select("*").single();
+    const { data, error } = await client.from("quotes").update(input as never).eq("id", id).select("*").single();
     throwRepositoryError("Update quote", error);
     return quoteRecordSchema.parse(data);
   },

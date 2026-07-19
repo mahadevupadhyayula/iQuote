@@ -31,8 +31,9 @@ export type CrmAccount = {
 export type CrmOpportunity = {
   id: string;
   accountId: string;
+  externalId: string | null;
   name: string;
-  stage: "discovery" | "proposal" | "negotiation" | "closed_won" | "closed_lost";
+  stage: "prospecting" | "qualification" | "proposal" | "negotiation" | "closed_won" | "closed_lost";
   ownerId: string | null;
   currencyCode: string;
   expectedCloseDate: string | null;
@@ -78,8 +79,9 @@ export type ResolvedPriceResponse = PriceCandidate & {
 };
 
 export type PricingAdapter = {
-  resolvePrice(input: ResolvePriceInput): Promise<ResolvedPriceResponse>;
+  resolvePrice(input: ResolvePriceInput): Promise<ResolvedPrice>;
   getPriceCandidates(input: ResolvePriceInput): Promise<PriceCandidate[]>;
+  getMetadata(input?: { currencyCode?: string; onDate?: string }): Promise<PricingSourceMetadata>;
 };
 
 export type InventoryWarehouseAvailability = {
@@ -133,17 +135,6 @@ export type PricingSourceMetadata = {
 
 export type PricingSourceMetadataAdapter = {
   getMetadata(input?: { currencyCode?: string; onDate?: string }): Promise<PricingSourceMetadata>;
-};
-
-export type PricingAdapter = PricingSourceMetadataAdapter & {
-  resolvePrice(input: {
-    productId: string;
-    customerId: string;
-    customerTier?: string | null;
-    quantity: number;
-    currencyCode: string;
-    onDate?: string;
-  }): Promise<ResolvedPrice>;
 };
 
 export type NotificationMessage = {

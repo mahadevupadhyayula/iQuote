@@ -37,6 +37,8 @@ import {
 } from "@/components/quotes/quote-workspace-actions";
 import { QuoteReviewWorkspace } from "@/components/quotes/quote-review-workspace";
 
+export const dynamic = "force-dynamic";
+
 const currency = (amount: number, code = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(
     amount,

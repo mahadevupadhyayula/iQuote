@@ -8,6 +8,8 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
 import type { QuoteRecord } from "@/lib/schemas/shared-records";
 
+export const dynamic = "force-dynamic";
+
 const currency = (amount: number, code = "USD") => new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
 const shortDateTime = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
