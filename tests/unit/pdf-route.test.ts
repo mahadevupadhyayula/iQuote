@@ -74,7 +74,9 @@ import { GET } from "@/app/api/quotes/[quoteId]/pdf/route";
 
 describe("quote PDF route", () => {
   it("returns a PDF response for a seeded approved quote", async () => {
-    const response = await GET(new Request("http://localhost/api/quotes/11111111-1111-4111-8111-111111111111/pdf"), { params: { quoteId } });
+    const response = await GET(new Request("http://localhost/api/quotes/11111111-1111-4111-8111-111111111111/pdf"), {
+      params: Promise.resolve({ quoteId }),
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");

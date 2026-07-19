@@ -6,7 +6,7 @@ import { createQuoteGenerationService } from "@/lib/services/quote-generation-se
 
 export const runtime = "nodejs";
 
-type RouteContext = { params: Promise<{ quoteId: string }> | { quoteId: string } };
+type RouteContext = { params: Promise<{ quoteId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   const { quoteId } = await context.params;
