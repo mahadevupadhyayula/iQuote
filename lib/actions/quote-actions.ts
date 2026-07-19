@@ -16,6 +16,7 @@ import { createExtractionService } from "@/lib/services/extraction-service";
 import { createProductMatchingService } from "@/lib/services/product-matching-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 import { createQuoteCommercialConfigurationService } from "@/lib/services/quote-commercial-configuration-service";
+import { allInventoryConfirmed, createQuotePricingResolutionService } from "@/lib/services/quote-pricing-resolution-service";
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
@@ -235,8 +236,13 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
     return replacementItem;
   });
   await repositories.quotes.replaceItems(data.quote_id, replacementItems);
-  const updated = await repositories.quotes.update(data.quote_id, { metadata: { ...quote.metadata, fulfillment_selected_at: new Date().toISOString() } });
+  let updated = await repositories.quotes.update(data.quote_id, { metadata: { ...quote.metadata, fulfillment_selected_at: new Date().toISOString() } });
   await recordUpdate(updated, data.actor_id, "select_fulfillment", { line_number: data.line_number, fulfillment: data.fulfillment, inventory_decision: inventoryDecision });
+  const latest = await repositories.quotes.findById(data.quote_id);
+  if (latest && allInventoryConfirmed(latest.items)) {
+    const pricing = await createQuotePricingResolutionService(repositories).resolveQuotePricing({ quoteId: data.quote_id, actorId: data.actor_id ?? null });
+    updated = pricing.quote;
+  }
   revalidatePath(quotePath(data.quote_id));
   return updated;
 }

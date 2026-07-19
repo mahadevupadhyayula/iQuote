@@ -9,6 +9,7 @@ import type { ProductsRepository } from "@/lib/repositories/products";
 import type { QuoteWithItems, QuotesRepository } from "@/lib/repositories/quotes";
 import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-events";
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
+import type { PricingBlocker } from "@/lib/services/quote-pricing-resolution-service";
 import type { ApprovalRecord, CustomerRecord, WorkflowEventRecord } from "@/lib/schemas/shared-records";
 import type { BasisPoints, Cents } from "@/lib/utils/money";
 
@@ -58,6 +59,14 @@ export type InternalQuoteLineViewModel = CustomerQuoteLineViewModel & {
   marginFloorPasses: boolean | null;
   inventoryDecision: unknown;
   internalNotes: unknown;
+  inventoryRecommendation: unknown;
+  selectedFulfillment: unknown;
+  inventoryApplied: boolean;
+  inventoryConfirmedAt: string | null;
+  priceApplication: unknown;
+  priceType: string | null;
+  priceSource: string | null;
+  pricingResolved: boolean;
 };
 
 export type InternalApprovalViewModel = Pick<ApprovalRecord, "id" | "required_role" | "status" | "requested_by" | "approver_id" | "requested_at" | "decided_at" | "comments" | "metadata">;
@@ -94,6 +103,15 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
   };
   workflowEvents: WorkflowEventRecord[];
   internalNotes: unknown;
+  configuration: {
+    inventoryRequiredCount: number;
+    inventoryResolvedCount: number;
+    allInventoryConfirmed: boolean;
+    pricingStatus: "not_started" | "pending_inventory" | "resolved" | "blocked";
+    pricingResolved: boolean;
+    pricingBlockers: Array<PricingBlocker>;
+    canContinue: boolean;
+  };
   reviewMetadata: {
     extraction: Record<string, unknown>;
     extractionStatus: string | null;
@@ -250,6 +268,12 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
     });
     const calculationsByLineId = new Map(calculated.lines.map((line) => [line.lineId, line]));
     const customerView = toCustomer(quote, customer);
+    const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers) ? quote.metadata.pricing_blockers as PricingBlocker[] : [];
+    const inventoryRequiredCount = quote.items.filter((item) => Boolean(item.product_id)).length;
+    const inventoryResolvedCount = quote.items.filter((item) => Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string").length;
+    const allInventoryConfirmed = inventoryRequiredCount > 0 && inventoryRequiredCount === inventoryResolvedCount;
+    const pricingResolved = quote.items.length > 0 && quote.items.every((item) => item.metadata.pricing_resolved === true);
+    const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] = pricingBlockers.length > 0 ? "blocked" : pricingResolved ? "resolved" : allInventoryConfirmed ? "not_started" : "pending_inventory";
 
     return {
       ...customerView,
@@ -260,16 +284,26 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
       updatedAt: quote.updated_at,
       lines: customerView.lines.map((line) => {
         const calculation = calculationsByLineId.get(line.id);
+        const item = quote.items.find((candidate) => candidate.id === line.id);
+        const priceApplication = metadataObject(item?.metadata.price_application);
         return {
           ...line,
-          productId: quote.items.find((item) => item.id === line.id)?.product_id ?? null,
+          productId: item?.product_id ?? null,
           unitCost: money(calculation?.unitCostCents ?? 0),
           lineCost: money(calculation?.costCents ?? 0),
           grossProfit: money(calculation?.grossProfitCents ?? 0),
           grossMarginBps: (calculation?.grossMarginBps ?? 0) as BasisPoints,
           marginFloorPasses: calculation?.marginFloorPasses ?? null,
-          inventoryDecision: quote.items.find((item) => item.id === line.id)?.metadata.inventory_decision,
-          internalNotes: quote.items.find((item) => item.id === line.id)?.metadata.internal_notes,
+          inventoryDecision: item?.metadata.inventory_decision,
+          internalNotes: item?.metadata.internal_notes,
+          inventoryRecommendation: item?.metadata.inventory_decision,
+          selectedFulfillment: item?.metadata.selected_fulfillment,
+          inventoryApplied: Array.isArray(item?.metadata.selected_fulfillment),
+          inventoryConfirmedAt: typeof item?.metadata.inventory_confirmed_at === "string" ? item.metadata.inventory_confirmed_at : null,
+          priceApplication: item?.metadata.price_application,
+          priceType: metadataString(priceApplication, "price_type"),
+          priceSource: metadataString(priceApplication, "source_name"),
+          pricingResolved: item?.metadata.pricing_resolved === true,
         };
       }),
       readiness,
@@ -277,6 +311,7 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
       approvalStatus: approvalStatus(approvals),
       sla: sla(quote, now()),
       workflowEvents,
+      configuration: { inventoryRequiredCount, inventoryResolvedCount, allInventoryConfirmed, pricingStatus, pricingResolved, pricingBlockers, canContinue: readiness.ready && pricingResolved && pricingBlockers.length === 0 },
       internalNotes: quote.metadata.internal_notes,
       reviewMetadata: reviewMetadata(quote.metadata),
     };
