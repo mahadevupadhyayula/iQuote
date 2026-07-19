@@ -69,7 +69,6 @@ const extractionJsonSchema = {
     "missing_fields",
     "ambiguities",
     "clarification_questions",
-    "field_confidence",
     "overall_confidence",
   ],
   properties: {
@@ -118,7 +117,6 @@ const extractionJsonSchema = {
       },
       default: [],
     },
-    field_confidence: { type: "object", additionalProperties: confidenceJsonSchema, default: {} },
     overall_confidence: confidenceJsonSchema,
   },
 } as const;
@@ -127,7 +125,7 @@ function sourceSpanJsonSchema() {
   return {
     type: "object",
     additionalProperties: false,
-    required: ["start", "end"],
+    required: ["start", "end","text"],
     properties: { start: { type: "integer", minimum: 0 }, end: { type: "integer", minimum: 0 }, text: { type: "string", minLength: 1 } },
   } as const;
 }
@@ -172,8 +170,53 @@ const getResponseText = (response: { output_text?: string; output?: unknown }) =
   throw new Error("OpenAI response did not include structured output text.");
 };
 
-const parseExtraction = (responseText: string) => extractionOutputSchema.parse(JSON.parse(responseText));
+const parseExtraction = (responseText: string) => {
+  console.log(
+    "[quote-extraction] raw response:",
+    responseText.slice(0, 5000),
+  );
 
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(responseText);
+  } catch (error) {
+    console.error("[quote-extraction] JSON parsing failed:", {
+      error,
+      responseText: responseText.slice(0, 5000),
+    });
+
+    throw error;
+  }
+
+  const normalizedJson =
+  parsedJson &&
+  typeof parsedJson === "object" &&
+  !Array.isArray(parsedJson)
+    ? {
+        ...parsedJson,
+        field_confidence: {},
+      }
+    : parsedJson;
+
+const validationResult =
+  extractionOutputSchema.safeParse(normalizedJson);
+
+  if (!validationResult.success) {
+    console.error(
+      "[quote-extraction] schema validation failed:",
+      JSON.stringify(
+        validationResult.error.issues,
+        null,
+        2,
+      ),
+    );
+
+    throw validationResult.error;
+  }
+
+  return validationResult.data;
+};
 export const createQuoteExtractionAdapter = (options: QuoteExtractionAdapterOptions = {}): QuoteExtractionAdapter => {
   const client = options.client ?? createOpenAIClient();
   const model = options.model ?? getOpenAIModel();
@@ -217,9 +260,36 @@ export const createQuoteExtractionAdapter = (options: QuoteExtractionAdapterOpti
           },
         });
 
-        return parseExtraction(getResponseText(response));
+console.log("[quote-extraction] response metadata:", {
+  status: response.status,
+  error: response.error,
+  incompleteDetails: response.incomplete_details,
+  outputTextLength:
+    typeof response.output_text === "string"
+      ? response.output_text.length
+      : 0,
+});
+
+const responseText = getResponseText(response);
+
+return parseExtraction(responseText);
+
       } catch (error) {
-        if (useFallbackOnError) return extractionOutputSchema.parse(buildFallbackExtraction(sourceText));
+        console.error(
+          "[quote-extraction] extraction failed:",
+          error,
+        );
+
+        if (useFallbackOnError) {
+          console.warn(
+            "[quote-extraction] using deterministic fallback",
+          );
+
+          return extractionOutputSchema.parse(
+            buildFallbackExtraction(sourceText),
+          );
+        }
+
         throw error;
       }
     },

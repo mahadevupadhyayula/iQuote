@@ -123,9 +123,9 @@ const inventory = [
   ["20000000-0000-4000-8000-000000000500", "SEA-01", 4, 0, 2],
   ["20000000-0000-4000-8000-000000000600", "DEN-01", 6, 1, 2],
   ["20000000-0000-4000-8000-000000000600", "SEA-01", 5, 0, 2],
-].map(([product_id, location_code, quantity_on_hand, quantity_reserved, reorder_point]) => ({
+].map(([product_id, warehouse_code, quantity_on_hand, quantity_reserved, reorder_point]) => ({
   product_id,
-  location_code,
+  warehouse_code,
   quantity_on_hand,
   quantity_reserved,
   reorder_point,
@@ -192,12 +192,36 @@ export const resetDemoData = async () => {
   const supabase: ReturnType<typeof createAdminSupabaseClient> = createAdminSupabaseClient();
   const productIds = demoProducts.map((product) => product.id);
   const customerIds = demoCustomers.map((customer) => customer.id);
+  const { data: demoOpportunities, error: opportunityLookupError } =
+  await supabase
+    .from("opportunities")
+    .select("id")
+    .in("customer_id", customerIds);
+
+assertNoError(
+  "Find demo opportunities",
+  opportunityLookupError,
+);
+
+const opportunityIds =
+  demoOpportunities?.map((opportunity) => opportunity.id) ?? [];
 
   assertNoError("Delete demo inventory", (await supabase.from("inventory").delete().in("product_id", productIds)).error);
   assertNoError("Delete demo prices", (await supabase.from("prices").delete().in("product_id", productIds)).error);
   assertNoError("Delete demo aliases", (await supabase.from("product_aliases").delete().in("product_id", productIds)).error);
   assertNoError("Delete demo discount policies", (await supabase.from("discount_policies").delete().in("id", discountPolicies.map((policy) => policy.id))).error);
   assertNoError("Delete demo products", (await supabase.from("products").delete().in("id", productIds)).error);
+  if (opportunityIds.length > 0) {
+  assertNoError(
+    "Delete demo opportunities",
+    (
+      await supabase
+        .from("opportunities")
+        .delete()
+        .in("id", opportunityIds)
+    ).error,
+  );
+}
   assertNoError("Delete demo customers", (await supabase.from("customers").delete().in("id", customerIds)).error);
 
   assertNoError("Insert demo customers", (await supabase.from("customers").insert(demoCustomers as never)).error);

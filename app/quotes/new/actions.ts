@@ -193,12 +193,24 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
         quantity: line.quantity.value,
       })) ?? [],
     };
-  } catch {
-    return {
-      ok: false,
-      error: "Unable to create the draft quote. Please use manual entry and try again later.",
-      manualFallback: true,
-      suggestions: ["Save the request details offline, create the quote manually, and retry extraction once services recover."],
-    };
+  } catch (error) {
+  console.error("[quote-intake] failed", error);
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : "Unknown quote-intake failure";
+
+  return {
+    ok: false,
+    error:
+      process.env.NODE_ENV === "development"
+        ? `Unable to create the draft quote: ${message}`
+        : "Unable to create the draft quote. Please try again later.",
+    manualFallback: true,
+    suggestions: [
+      "Check the server log for the failing database or extraction stage.",
+    ],
+  };
   }
 }
