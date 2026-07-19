@@ -17,8 +17,8 @@ const now = "2026-07-18T12:00:00.000Z";
 const onDate = "2026-07-18";
 
 const listPrices = [
-  { id: "price-ax-200", productId: demoProducts.ax200.id, currencyCode: "USD", unitPrice: 1280, effectiveFrom: "2026-01-01", effectiveTo: null, sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
-  { id: "price-hx-500", productId: demoProducts.hx500.id, currencyCode: "USD", unitPrice: 3425, effectiveFrom: "2026-01-01", effectiveTo: "2026-09-30", sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
+  { id: "price-ax-200", productId: demoProducts.ax200.id, currencyCode: "USD", unitPrice: 1280, unitCost: 820, effectiveFrom: "2026-01-01", effectiveTo: null, sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
+  { id: "price-hx-500", productId: demoProducts.hx500.id, currencyCode: "USD", unitPrice: 3425, unitCost: 0, effectiveFrom: "2026-01-01", effectiveTo: "2026-09-30", sourceName: "supabase/seed.sql", sourceVersion: "atlas-northstar" },
 ];
 
 const inventory: InventoryRuleRecord[] = [

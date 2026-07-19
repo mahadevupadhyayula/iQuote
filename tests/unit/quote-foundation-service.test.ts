@@ -41,6 +41,6 @@ describe("quote foundation service", () => {
     expect(repo.workflowEvents.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "approved", payload: expect.objectContaining({ action: "phase_1_acceptance" }) }));
     expect(result).toMatchObject({ customer, quote: updatedQuote, items: [item], approvals: [], approvalEvaluation: { requirement: "straight_through" } });
     expect(result.lines[0].inventoryDecision.status).toBe("single_warehouse");
-    expect(result.calculation.grossMarginBps).toBe(6842);
+    expect(result.calculation.grossMarginBps).toBe(3684);
   });
 });
