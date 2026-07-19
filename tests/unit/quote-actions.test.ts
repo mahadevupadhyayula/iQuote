@@ -72,7 +72,7 @@ const repositories = {
   },
   products: { findById: vi.fn(async () => ({ id: productId, sku: "SKU-1", name: "Matched product", status: "active", description: null, unit_of_measure: "ea", metadata: {}, created_at: timestamp, updated_at: timestamp })), listSubstitutes: vi.fn(async () => []) },
   inventory: {
-    listByProduct: vi.fn(async () => [{ id: "10101010-1010-4010-8010-101010101010", product_id: productId, warehouse_code: "MAIN", quantity_on_hand: 5, quantity_reserved: 0, reorder_point: 0, source_name: "test", source_version: "v1", refreshed_at: freshInventoryTimestamp, metadata: {}, updated_at: freshInventoryTimestamp }]),
+    listByProduct: vi.fn(async () => [{ id: "10101010-1010-4010-8010-101010101010", product_id: productId, warehouse_code: "MAIN", quantity_on_hand: 5, quantity_reserved: 0, reorder_point: 0, source_name: "test", source_version: "v1", refreshed_at: timestamp, metadata: {}, updated_at: timestamp }]),
     listByProducts: vi.fn(async () => []),
     findAtLocation: vi.fn(async () => null),
   },
