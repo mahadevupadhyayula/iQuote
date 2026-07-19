@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CustomerRecord, PriceRecord, QuoteItemRecord, WorkflowEventRecord } from "@/lib/schemas/shared-records";
+import type { CustomerRecord, PriceRecord, QuoteItemRecord, QuoteRecord, WorkflowEventRecord } from "@/lib/schemas/shared-records";
 import { allInventoryConfirmed, createQuotePricingResolutionService, type QuotePricingResolutionRepositories } from "@/lib/services/quote-pricing-resolution-service";
 import type { QuoteItemCreateInput, QuoteUpdateInput, QuoteWithItems } from "@/lib/repositories/quotes";
 
@@ -22,8 +22,8 @@ type ResolvedLine = QuoteItemRecord & {
   };
 };
 
-type ResolvedQuote = QuoteWithItems & {
-  metadata: QuoteWithItems["metadata"] & {
+type ResolvedQuote = QuoteRecord & {
+  metadata: QuoteRecord["metadata"] & {
     commercial_calculation?: TestCommercialCalculation;
   };
 };
@@ -64,7 +64,7 @@ const customer: CustomerRecord = {
   updated_at: timestamp,
 };
 
-const workflowEvent: WorkflowEventRecord = {
+const workflowEvent: WorkflowEventRecord & { idempotency_key: string | null } = {
   id: "92000000-0000-4000-8000-000000000001",
   quote_id: quoteId,
   event_type: "updated",
@@ -73,6 +73,7 @@ const workflowEvent: WorkflowEventRecord = {
   to_status: "configuring",
   payload: {},
   created_at: timestamp,
+  idempotency_key: null,
 };
 
 const quote: QuoteWithItems = {
@@ -141,7 +142,7 @@ const makeRepositories = (priceFixtures: PriceFixtures): QuotePricingResolutionR
 };
 
 const firstLine = (items: QuoteItemRecord[]): ResolvedLine => items[0] as ResolvedLine;
-const resolvedQuote = (candidate: QuoteWithItems): ResolvedQuote => candidate as ResolvedQuote;
+const resolvedQuote = (candidate: QuoteRecord): ResolvedQuote => candidate as ResolvedQuote;
 
 describe("quote pricing resolution", () => {
   it("recognizes when all inventory lines are confirmed", () => {
