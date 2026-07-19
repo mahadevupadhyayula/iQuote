@@ -70,7 +70,7 @@ export const createWorkflowEventsRepository = (client: RepositoryClient) => ({
       }
     }
 
-    const { data, error } = await client.from("workflow_events").insert(input).select("*").single();
+    const { data, error } = await client.from("workflow_events").insert(input as never).select("*").single();
     if (isUniqueViolation(error) && input.idempotency_key) {
       const existing = await this.findByIdempotencyKey(input.quote_id, input.idempotency_key);
       if (existing) {
