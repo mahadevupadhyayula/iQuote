@@ -20,7 +20,7 @@ export default async function GenerateQuotePage({ params }: { params: Promise<{ 
   if (!quote) notFound();
 
   return (
-    <WorkspaceLayout currentStep="generate" status={quote.status} contentClassName="space-y-6">
+    <WorkspaceLayout currentStep="generate-quote" status={quote.status} contentClassName="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">Generate customer quote</p><h1 className="text-3xl font-bold">{quote.quoteNumber}</h1><p className="text-slate-600">Customer-ready preview for {quote.customer?.name ?? "Unknown customer"}.</p></div><Badge className="bg-white text-sm text-slate-700">{quote.status.replaceAll("_", " ")}</Badge></header>
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-blue-600" /> Customer quote preview</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">{quote.lines.map((line) => <div key={line.id} className="flex justify-between border-b pb-2"><span>{line.quantity} × {line.description}</span><strong>{currency(line.lineTotalAmount, quote.currencyCode)}</strong></div>)}</CardContent></Card>
