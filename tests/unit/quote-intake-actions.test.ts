@@ -103,20 +103,19 @@ describe("submitQuoteIntake", () => {
     expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "configuring", extractionStatus: "completed" });
   });
 
-  it("returns needs_information when extraction reports missing information", async () => {
+  it("returns needs_information when extraction reports ambiguous information requiring review", async () => {
     state.extractionError = null;
     state.extractionOutput = completeExtraction({
-      source_text: "Atlas needs AX-200.",
-      requested_items: [{ line_number: 1, raw_item_description: { value: "AX-200", missing: false, confidence: 0.95, source_span: null }, requested_sku: { value: "AX-200", missing: false, confidence: 0.95, source_span: null }, quantity: { value: null, missing: true, confidence: 0, source_span: null }, specifications: { value: null, missing: true, confidence: 0, source_span: null } }],
-      delivery_location: { value: null, missing: true, confidence: 0, source_span: null },
-      delivery_date: { value: null, missing: true, confidence: 0, source_span: null },
-      missing_fields: ["requested_items[0].quantity", "requested_items[0].specifications", "delivery_location", "delivery_date", "requested_discount"],
-      overall_confidence: 0.5,
+      source_text: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear.",
+      installation_requirement: { value: "installation ownership unclear", missing: false, confidence: 0.35, source_span: null },
+      ambiguities: [{ field: "installation_requirement", description: "Customer text does not confirm whether Atlas or the vendor owns installation." }],
+      clarification_questions: [{ field: "installation_requirement", question: "Should Atlas install internally, or should vendor installation be included?" }],
+      overall_confidence: 0.72,
     });
 
-    const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs AX-200." });
+    const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear." });
 
     expect(result).toMatchObject({ ok: true, status: "needs_information" });
-    expect(result.ok && result.missingFields).toEqual(expect.arrayContaining(["requested_items[0].quantity", "delivery_location", "delivery_date"]));
+    expect(result.ok && result.clarificationQuestions).toEqual(expect.arrayContaining([expect.objectContaining({ field: "installation_requirement" })]));
   });
 });
