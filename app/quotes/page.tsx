@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
+import { getQuoteQueueActionLabel } from "@/lib/rules/quote-stage-routing";
 import type { QuoteRecord } from "@/lib/schemas/shared-records";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,7 @@ export default async function QuotesPage() {
                         <TableCell>{currency(quote.total_amount, quote.currency_code)}</TableCell>
                         <TableCell><Badge className={sla.className}><Clock3 className="mr-1 h-3 w-3" /> {sla.label}</Badge></TableCell>
                         <TableCell className="text-slate-600">{shortDateTime(quote.updated_at)}</TableCell>
-                        <TableCell className="text-right"><Link href={`/quotes/${quote.id}`} className="font-semibold text-blue-600 hover:text-blue-800">Open quote</Link></TableCell>
+                        <TableCell className="text-right"><Link href={`/quotes/${quote.id}`} className="font-semibold text-blue-600 hover:text-blue-800">{getQuoteQueueActionLabel(quote.status)}</Link></TableCell>
                       </TableRow>
                     );
                   })}
