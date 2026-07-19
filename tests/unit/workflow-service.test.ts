@@ -27,6 +27,7 @@ const buildQuote = (status: QuoteStatus, items: QuoteWithItems["items"] = [{ id:
   approved_at: null,
   sent_at: null,
   accepted_at: null,
+  sla_due_at: null,
   metadata: {},
   created_at: timestamp,
   updated_at: timestamp,

@@ -105,7 +105,7 @@ describe("quote actions", () => {
       product_candidates: { 1: "SKU-NEW" },
       rep_confirmation: { confirmed: true, confirmed_by: actorId },
       metadata: { extraction: { original_request_text: "Attempted overwrite" } },
-      lines: [{ sku: "SKU-NEW", description: "New item", quantity: 2, unit_price: 50, discount_bps: 1000 }],
+      lines: [{ sku: "SKU-NEW", description: "New item", quantity: 2, unit_price: 50, discount_bps: 1000, metadata: {} }],
     });
 
     expect(result.status).toBe("needs_information");
@@ -122,7 +122,7 @@ describe("quote actions", () => {
   });
 
   it("saves drafts without advancing quote status", async () => {
-    await saveQuoteDraft({ quote_id: quoteId, actor_id: actorId, requirements: { note: "keep drafting" } });
+    await saveQuoteDraft({ quote_id: quoteId, actor_id: actorId, requirements: { note: "keep drafting" }, metadata: {} });
 
     expect(storedQuote.status).toBe("needs_information");
     expect(repositories.quotes.updateStatus).not.toHaveBeenCalled();

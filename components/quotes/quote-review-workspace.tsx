@@ -21,14 +21,14 @@ const asObject = (value: unknown): JsonObject => (value && typeof value === "obj
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const text = (value: unknown, fallback = "Not provided") => (typeof value === "string" && value.trim() ? value : fallback);
 const confidencePercent = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : null);
-const fieldValue = (field: unknown) => {
+const fieldValue = (field: unknown, fallback = "Missing") => {
   const object = asObject(field);
-  if ("value" in object) return object.value == null || object.value === "" ? "Missing" : String(object.value);
-  return field == null || field === "" ? "Missing" : String(field);
+  if ("value" in object) return object.value == null || object.value === "" ? fallback : String(object.value);
+  return field == null || field === "" ? fallback : String(field);
 };
 const fieldConfidence = (metadata: Props["quote"]["reviewMetadata"], key: string) => {
   const direct = asObject(metadata.fieldConfidence)[key];
-  const field = asObject(metadata.extractionFields)[key];
+  const field = asObject(asObject(metadata.extractionFields)[key]);
   return confidencePercent(direct ?? field.confidence ?? asObject(field.value).confidence);
 };
 const serializeLines = (quote: InternalQuoteWorkspaceViewModel) => quote.lines.map((line) => ({
@@ -71,6 +71,7 @@ function RequirementsEditor({ quote }: Props) {
       actor_id: actorId,
       currency_code: String(formData.get("currency_code") ?? quote.currencyCode),
       valid_until: String(formData.get("valid_until") || quote.validUntil || "") || null,
+      metadata: {},
       lines: serializeLines(quote).map((line, index) => index === 0 ? { ...line, quantity: Number(formData.get("quantity") || line.quantity), discount_bps: Number(formData.get("discount_bps") || line.discount_bps) } : line),
       requirements: {
         customer_name: String(formData.get("customer_name") ?? ""),

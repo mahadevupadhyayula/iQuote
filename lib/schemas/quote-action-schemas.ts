@@ -118,14 +118,14 @@ export const continueQuoteConfigurationActionSchema = z.object({
   idempotency_key: z.string().trim().min(1).optional(),
 });
 
-export type CreateQuoteDraftActionInput = z.infer<typeof createQuoteDraftActionSchema>;
-export type ExtractAndBuildQuoteActionInput = z.infer<typeof extractAndBuildQuoteActionSchema>;
-export type ApplyRepCorrectionsActionInput = z.infer<typeof applyRepCorrectionsActionSchema>;
-export type SelectFulfillmentActionInput = z.infer<typeof selectFulfillmentActionSchema>;
-export type SubmitQuoteForApprovalActionInput = z.infer<typeof submitQuoteForApprovalActionSchema>;
-export type GenerateQuoteActionInput = z.infer<typeof generateQuoteActionSchema>;
-export type SendQuoteActionInput = z.infer<typeof sendQuoteActionSchema>;
-export type SaveQuoteDraftActionInput = z.infer<typeof saveQuoteDraftActionSchema>;
-export type ContinueQuoteConfigurationActionInput = z.infer<typeof continueQuoteConfigurationActionSchema>;
+export type CreateQuoteDraftActionInput = z.input<typeof createQuoteDraftActionSchema>;
+export type ExtractAndBuildQuoteActionInput = z.input<typeof extractAndBuildQuoteActionSchema>;
+export type ApplyRepCorrectionsActionInput = z.input<typeof applyRepCorrectionsActionSchema>;
+export type SelectFulfillmentActionInput = z.input<typeof selectFulfillmentActionSchema>;
+export type SubmitQuoteForApprovalActionInput = z.input<typeof submitQuoteForApprovalActionSchema>;
+export type GenerateQuoteActionInput = z.input<typeof generateQuoteActionSchema>;
+export type SendQuoteActionInput = z.input<typeof sendQuoteActionSchema>;
+export type SaveQuoteDraftActionInput = z.input<typeof saveQuoteDraftActionSchema>;
+export type ContinueQuoteConfigurationActionInput = z.input<typeof continueQuoteConfigurationActionSchema>;
 
 export type QuoteAction = z.infer<typeof quoteActionSchema>;

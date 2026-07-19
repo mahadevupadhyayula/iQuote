@@ -38,6 +38,10 @@ export const createMockPricingAdapter = (repositories: Pick<Repositories, "price
     });
   },
 
+  async getPriceCandidates() {
+    return [];
+  },
+
   async getMetadata(input = {}) {
     const onDate = input.onDate ?? today();
     const prices = await repositories.prices.listCurrentPrices([], input.currencyCode ?? "USD", onDate);

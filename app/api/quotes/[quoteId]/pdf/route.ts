@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: result.code, message: result.message }, { status: result.status });
   }
 
-  return new NextResponse(result.buffer, {
+  return new NextResponse(new Uint8Array(result.buffer), {
     headers: {
       "Content-Type": result.contentType,
       "Content-Disposition": `inline; filename="${result.fileName.replace(/[^a-zA-Z0-9._-]/g, "-")}"`,

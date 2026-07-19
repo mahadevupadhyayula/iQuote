@@ -9,7 +9,6 @@ import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import { evaluateQuoteReadiness } from "@/lib/rules/readiness-rules";
 import { createRepositories } from "@/lib/repositories";
 import type { QuoteItemCreateInput } from "@/lib/repositories/quotes";
-import type { QuoteItemRecord } from "@/lib/schemas/shared-records";
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
 import { createInventoryService } from "@/lib/services/inventory-service";
 import { createExtractionService } from "@/lib/services/extraction-service";
@@ -151,6 +150,7 @@ export async function createQuoteDraft(input: CreateQuoteDraftActionInput) {
     approved_at: null,
     sent_at: null,
     accepted_at: null,
+    sla_due_at: null,
     metadata: data.metadata,
   });
   await repositories.workflowEvents.record({ quote_id: quote.id, event_type: "created", actor_id: data.actor_id ?? null, from_status: null, to_status: "draft", payload: { action: "create_quote_draft" } });
@@ -222,9 +222,8 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   const inventoryDecision = await inventoryService.evaluateAvailability({ product, quantity: targetItem.quantity, allowSplitFulfillment: true });
   const items = quote.items.map((item) => item.line_number === data.line_number ? { ...item, metadata: { ...item.metadata, inventory_decision: inventoryDecision, selected_fulfillment: data.fulfillment } } : item);
   const replacementItems = items.map((item): QuoteItemCreateInput => {
-    const { id, quote_id, created_at, ...replacementItem } = item as QuoteItemRecord;
+    const { id, created_at, ...replacementItem } = item as QuoteItemRecord;
     void id;
-    void quote_id;
     void created_at;
     return replacementItem;
   });

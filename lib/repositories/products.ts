@@ -83,7 +83,7 @@ export const createProductsRepository = (client: RepositoryClient) => {
     return productRecordSchema.array().parse(data ?? []);
   },
 
-  async findReplacement(productId: string) {
+  async findReplacement(productId: string): Promise<ProductRecord | null> {
     const substitutes = await this.listSubstitutes(productId);
     return substitutes[0] ?? null;
   },
