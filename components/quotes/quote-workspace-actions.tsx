@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { applyRepCorrections, generateQuote, saveQuoteDraft, selectFulfillment, submitQuoteForApproval } from "@/app/quotes/[quoteId]/actions";
+import { applyRepCorrections, continueQuoteConfiguration, saveQuoteDraft, selectFulfillment } from "@/app/quotes/[quoteId]/actions";
 import type { InternalQuoteWorkspaceViewModel } from "@/lib/services/quote-workspace-query-service";
 
 type Props = { quote: InternalQuoteWorkspaceViewModel };
@@ -52,7 +52,7 @@ export function FulfillmentButton({ quote, lineNumber }: Props & { lineNumber: n
   return <Button variant="outline" size="sm" disabled={pending || !productId} onClick={() => {
     if (!productId) return;
     startTransition(async () => {
-      await selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber, fulfillment: [{ productId, locationCode: "AUTO", quantity: line.quantity, availableQuantity: line.quantity }] });
+      await selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber });
     });
   }}>{pending ? "Saving..." : "Use recommended"}</Button>;
 }
@@ -62,8 +62,7 @@ export function QuoteWorkflowActions({ quote }: Props) {
   const [isPending, startTransition] = useTransition();
   const run = (name: string, action: () => Promise<unknown>) => startTransition(async () => { setPendingAction(name); await action(); setPendingAction(null); });
   return <div className="space-y-3">
-    <Button className="w-full" disabled={isPending} onClick={() => run("generate", () => generateQuote({ quote_id: quote.id, actor_id: actorId, payment_terms: { termsCode: "NET30", accepted: true }, idempotency_key: `generate-${quote.id}` }))}>{pendingAction === "generate" ? "Generating..." : "Generate Quote"}</Button>
-    <Button variant="outline" className="w-full" disabled={isPending} onClick={() => run("approval", () => submitQuoteForApproval({ quote_id: quote.id, actor_id: actorId, idempotency_key: `approval-${quote.id}` }))}>{pendingAction === "approval" ? "Submitting..." : "Submit for Approval"}</Button>
+    <Button className="w-full" disabled={isPending} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button>
     <Button variant="outline" className="w-full" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button>
   </div>;
 }

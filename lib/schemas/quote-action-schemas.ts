@@ -75,7 +75,7 @@ export const selectFulfillmentActionSchema = z.object({
     locationCode: z.string().trim().min(1),
     quantity: z.coerce.number().positive(),
     availableQuantity: z.coerce.number().nonnegative(),
-  })).min(1),
+  })).min(1).optional(),
 });
 
 export const submitQuoteForApprovalActionSchema = z.object({
