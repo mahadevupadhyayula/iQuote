@@ -6,6 +6,10 @@ import { createProductMatchingService } from "@/lib/services/product-matching-se
 import type { OpenAIResponsesClient } from "@/lib/adapters/ai/openai-client";
 import type { ProductRecord } from "@/lib/schemas/shared-records";
 
+type ProductMatchingRequest = {
+  input: [{ content: unknown }, { content: [{ text: string }] }];
+};
+
 const timestamp = "2026-07-18T00:00:00.000Z";
 const product = (overrides: Partial<ProductRecord> = {}): ProductRecord => ({
   id: "10000000-0000-4000-8000-000000000001",
@@ -61,7 +65,7 @@ describe("createProductMatchingService", () => {
     const result = await createProductMatchingService({ productsRepository, client, model: "gpt-test" }).matchLine({ lineNumber: 1, description: "pump" });
 
     expect(result).toMatchObject({ product: candidate, method: "ai_suggestion", ambiguous: true, requiresRepConfirmation: true });
-    const request = vi.mocked(client.responses.create).mock.calls[0][0] as any;
+    const request = vi.mocked(client.responses.create).mock.calls[0][0] as ProductMatchingRequest;
     const payload = JSON.parse(request.input[1].content[0].text as string);
     expect(payload).toEqual({
       extracted_line: { lineNumber: 1, description: "pump" },

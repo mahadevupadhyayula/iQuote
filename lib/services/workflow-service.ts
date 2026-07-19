@@ -105,7 +105,8 @@ const stableStringify = (value: unknown): string => {
 };
 
 const normalizeLegacyPayload = (payload: Record<string, unknown>) => {
-  const { idempotency_key: _idempotencyKey, ...structuredPayload } = payload;
+  const structuredPayload = { ...payload };
+  delete structuredPayload.idempotency_key;
   return structuredPayload;
 };
 

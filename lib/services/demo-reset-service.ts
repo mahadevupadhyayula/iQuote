@@ -189,7 +189,7 @@ const assertNoError = (label: string, error: { message: string } | null) => {
 };
 
 export const resetDemoData = async () => {
-  const supabase = createAdminSupabaseClient() as any;
+  const supabase: ReturnType<typeof createAdminSupabaseClient> = createAdminSupabaseClient();
   const productIds = demoProducts.map((product) => product.id);
   const customerIds = demoCustomers.map((customer) => customer.id);
 
