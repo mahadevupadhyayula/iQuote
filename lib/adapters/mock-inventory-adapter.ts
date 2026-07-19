@@ -51,7 +51,6 @@ export const createMockErpInventoryAdapter = (repositories: Pick<Repositories, "
       sourceName: locations[0]?.sourceName ?? "demo_erp_inventory",
       sourceVersion: locations[0]?.sourceVersion ?? "1",
       refreshed_at: locations[0]?.refreshed_at ?? new Date(0).toISOString(),
-      sources: locations.map(({ sourceName, sourceVersion, asOf }) => ({ sourceName, sourceVersion, refreshedAt: asOf })),
     };
   };
 

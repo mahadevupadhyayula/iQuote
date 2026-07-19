@@ -197,6 +197,7 @@ export const createQuoteFoundationService = ({ repositories, now = () => new Dat
         approved_at: null,
         sent_at: null,
         accepted_at: null,
+        sla_due_at: null,
         metadata: {
           ...input.metadata,
           acceptance_flow: "phase_1",

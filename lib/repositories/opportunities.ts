@@ -26,7 +26,7 @@ export const createOpportunitiesRepository = (client: RepositoryClient) => ({
   },
 
   async create(input: OpportunityCreateInput) {
-    const { data, error } = await client.from("opportunities").insert(input).select("*").single();
+    const { data, error } = await client.from("opportunities").insert(input as never).select("*").single();
     throwRepositoryError("Create opportunity", error);
     return opportunityRecordSchema.parse(data);
   },
