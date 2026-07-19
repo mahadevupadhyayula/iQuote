@@ -102,17 +102,17 @@ values
 insert into public.inventory (id, product_id, warehouse_code, quantity_on_hand, quantity_reserved, reorder_point, source_name, source_version, refreshed_at)
 values
   -- Straight-through scenario: Atlas AX-200 can ship from Chicago alone.
-  ('50000000-0000-4000-8000-000000000201', '20000000-0000-4000-8000-000000000200', 'CHI-01', 18, 2, 4, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
-  ('50000000-0000-4000-8000-000000000202', '20000000-0000-4000-8000-000000000200', 'HOU-01', 4, 1, 3, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
+  ('50000000-0000-4000-8000-000000000201', '20000000-0000-4000-8000-000000000200', 'CHI-01', 18, 2, 4, 'demo_wms_snapshot', now(), now()),
+  ('50000000-0000-4000-8000-000000000202', '20000000-0000-4000-8000-000000000200', 'HOU-01', 4, 1, 3, 'demo_wms_snapshot', now(), now()),
   -- Split scenario: Northstar HX-500 requires Denver + Houston for medium demand.
-  ('50000000-0000-4000-8000-000000000501', '20000000-0000-4000-8000-000000000500', 'DEN-01', 4, 1, 2, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
-  ('50000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000500', 'HOU-01', 3, 0, 2, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
-  ('50000000-0000-4000-8000-000000000503', '20000000-0000-4000-8000-000000000500', 'CHI-01', 1, 0, 1, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
+  ('50000000-0000-4000-8000-000000000501', '20000000-0000-4000-8000-000000000500', 'DEN-01', 4, 1, 2, 'demo_wms_snapshot', now(), now()),
+  ('50000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000500', 'HOU-01', 3, 0, 2, 'demo_wms_snapshot', now(), now()),
+  ('50000000-0000-4000-8000-000000000503', '20000000-0000-4000-8000-000000000500', 'CHI-01', 1, 0, 1, 'demo_wms_snapshot', now(), now()),
   -- Replacement SKU scenario: HX-500R has enough stock to substitute when HX-500 is short.
-  ('50000000-0000-4000-8000-000000000601', '20000000-0000-4000-8000-000000000600', 'DEN-01', 9, 1, 2, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
-  ('50000000-0000-4000-8000-000000000602', '20000000-0000-4000-8000-000000000600', 'HOU-01', 5, 0, 2, 'demo_wms_snapshot', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z'),
+  ('50000000-0000-4000-8000-000000000601', '20000000-0000-4000-8000-000000000600', 'DEN-01', 9, 1, 2, 'demo_wms_snapshot', now(), now()),
+  ('50000000-0000-4000-8000-000000000602', '20000000-0000-4000-8000-000000000600', 'HOU-01', 5, 0, 2, 'demo_wms_snapshot', now(), now()),
   -- Service item inventory rows keep warehouse references deterministic without adding physical stock.
-  ('50000000-0000-4000-8000-000000000701', '20000000-0000-4000-8000-000000000700', 'CHI-01', 0, 0, 0, 'demo_services_capacity', '2026.07.18T00:00Z', '2026-07-18T00:00:00Z');
+  ('50000000-0000-4000-8000-000000000701', '20000000-0000-4000-8000-000000000700', 'CHI-01', 0, 0, 0, 'demo_services_capacity', now(), now());
 
 insert into public.discount_policies (id, name, description, policy_type, discount_bps, max_discount_bps, amount_off, starts_on, ends_on, active, conditions, minimum_margin_bps, metadata)
 values
