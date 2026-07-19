@@ -206,22 +206,29 @@ assertNoError(
 const opportunityIds =
   demoOpportunities?.map((opportunity) => opportunity.id) ?? [];
 
-  assertNoError("Delete demo inventory", (await supabase.from("inventory").delete().in("product_id", productIds)).error);
+  const quoteFilters = [`metadata->>demo_seed.eq.${demoSeed}`, `customer_id.in.(${customerIds.join(",")})`];
+  if (opportunityIds.length > 0) quoteFilters.push(`opportunity_id.in.(${opportunityIds.join(",")})`);
+  const { data: demoQuotes, error: quoteLookupError } = await supabase
+    .from("quotes")
+    .select("id")
+    .or(quoteFilters.join(","));
+  assertNoError("Find demo quotes", quoteLookupError);
+  const quoteIds = demoQuotes?.map((quote) => quote.id) ?? [];
+
+  if (quoteIds.length > 0) {
+    assertNoError("Delete demo workflow events", (await supabase.from("workflow_events").delete().in("quote_id", quoteIds)).error);
+    assertNoError("Delete demo approvals", (await supabase.from("approvals").delete().in("quote_id", quoteIds)).error);
+    assertNoError("Delete demo quote items", (await supabase.from("quote_items").delete().in("quote_id", quoteIds)).error);
+    assertNoError("Delete demo quotes", (await supabase.from("quotes").delete().in("id", quoteIds)).error);
+  }
+  if (opportunityIds.length > 0) {
+    assertNoError("Delete demo opportunities", (await supabase.from("opportunities").delete().in("id", opportunityIds)).error);
+  }
   assertNoError("Delete demo prices", (await supabase.from("prices").delete().in("product_id", productIds)).error);
+  assertNoError("Delete demo inventory", (await supabase.from("inventory").delete().in("product_id", productIds)).error);
   assertNoError("Delete demo aliases", (await supabase.from("product_aliases").delete().in("product_id", productIds)).error);
   assertNoError("Delete demo discount policies", (await supabase.from("discount_policies").delete().in("id", discountPolicies.map((policy) => policy.id))).error);
   assertNoError("Delete demo products", (await supabase.from("products").delete().in("id", productIds)).error);
-  if (opportunityIds.length > 0) {
-  assertNoError(
-    "Delete demo opportunities",
-    (
-      await supabase
-        .from("opportunities")
-        .delete()
-        .in("id", opportunityIds)
-    ).error,
-  );
-}
   assertNoError("Delete demo customers", (await supabase.from("customers").delete().in("id", customerIds)).error);
 
   assertNoError("Insert demo customers", (await supabase.from("customers").insert(demoCustomers as never)).error);

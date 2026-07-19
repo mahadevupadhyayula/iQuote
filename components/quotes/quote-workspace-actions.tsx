@@ -62,7 +62,7 @@ export function QuoteWorkflowActions({ quote }: Props) {
   const [isPending, startTransition] = useTransition();
   const run = (name: string, action: () => Promise<unknown>) => startTransition(async () => { setPendingAction(name); await action(); setPendingAction(null); });
   return <div className="space-y-3">
-    <Button className="w-full" disabled={isPending} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button>
+    <Button className="w-full" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button>
     <Button variant="outline" className="w-full" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button>
   </div>;
 }
