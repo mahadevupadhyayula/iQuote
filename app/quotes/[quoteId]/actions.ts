@@ -7,6 +7,7 @@ import {
   extractAndBuildQuote as extractAndBuildQuoteAction,
   generateQuote as generateQuoteAction,
   saveQuoteDraft as saveQuoteDraftAction,
+  reviseRejectedQuote as reviseRejectedQuoteAction,
   selectFulfillment as selectFulfillmentAction,
   sendQuote as sendQuoteAction,
   submitQuoteForApproval as submitQuoteForApprovalAction,
@@ -18,6 +19,7 @@ import type {
   ExtractAndBuildQuoteActionInput,
   GenerateQuoteActionInput,
   SaveQuoteDraftActionInput,
+  ReviseRejectedQuoteActionInput,
   SelectFulfillmentActionInput,
   SendQuoteActionInput,
   SubmitQuoteForApprovalActionInput,
@@ -57,4 +59,8 @@ export async function sendQuote(input: SendQuoteActionInput) {
 
 export async function submitQuoteForApproval(input: SubmitQuoteForApprovalActionInput) {
   return submitQuoteForApprovalAction(input);
+}
+
+export async function reviseRejectedQuote(input: ReviseRejectedQuoteActionInput) {
+  return reviseRejectedQuoteAction(input);
 }

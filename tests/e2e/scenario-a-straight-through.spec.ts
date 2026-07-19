@@ -21,7 +21,7 @@ test.describe("scenario A: straight-through Atlas Manufacturing quote", () => {
     await page.getByLabel("Valid until").fill("2026-09-15");
     await page.getByLabel("Request text").fill(requestText);
 
-    await page.getByRole("button", { name: /create draft and run extraction/i }).click();
+    await page.getByRole("button", { name: /extract and build quote/i }).click();
 
     const createdAlert = page.getByText(/Draft Q-\d+ created/i);
     await expect(createdAlert).toBeVisible({ timeout: 30_000 });
@@ -50,16 +50,23 @@ test.describe("scenario A: straight-through Atlas Manufacturing quote", () => {
     await expect(page.getByText(/Chicago/i)).toBeVisible();
     await expect(page.getByText(/Houston/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /^generate quote$/i }).click();
+    await page.getByRole("button", { name: /^continue$/i }).click();
     await expect(page.getByText("Requirements complete")).toBeVisible();
     await expect(page.getByText("Inventory resolved")).toBeVisible();
     await expect(page.getByText("Margin within policy")).toBeVisible();
     await expect(page.getByText("Terms accepted")).toBeVisible();
     await expect(page.getByText(/approved/i)).toBeVisible();
 
-    const pdfResponse = await request.get(new URL(`${page.url()}/pdf`).pathname);
+    const quoteId = new URL(page.url()).pathname.split("/")[2];
+    const pdfResponse = await request.get(`/api/quotes/${quoteId}/pdf`);
     expect(pdfResponse.ok(), await pdfResponse.text()).toBeTruthy();
     expect(pdfResponse.headers()["content-type"]).toMatch(/application\/pdf/i);
     expect(pdfResponse.headers()["content-disposition"]).toMatch(/filename=.*\.pdf/i);
+
+    await page.getByLabel("Recipient email").fill("buyer@atlas.example");
+    await page.getByLabel("Optional message").fill("Demo quote delivery");
+    await page.getByRole("button", { name: /^send quote$/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/quotes/${quoteId}/sent$`));
+    await expect(page.getByText("Mock delivery status")).toBeVisible();
   });
 });

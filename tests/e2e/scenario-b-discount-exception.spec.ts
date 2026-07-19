@@ -34,7 +34,7 @@ test.describe("scenario B: discount exception approval", () => {
     await page.getByLabel("Valid until").fill("2026-09-15");
     await page.getByLabel("Request text").fill(requestText);
 
-    await page.getByRole("button", { name: /create draft and run extraction/i }).click();
+    await page.getByRole("button", { name: /extract and build quote/i }).click();
 
     const createdAlert = page.getByText(/Draft Q-\d+ created/i);
     await expect(createdAlert).toBeVisible({ timeout: 30_000 });
@@ -95,7 +95,7 @@ test.describe("scenario B: discount exception approval", () => {
     expect(modifiedDiscount).not.toEqual(originalDiscount);
     expect(modifiedTotal).not.toEqual(originalTotal);
 
-    await page.getByRole("button", { name: /^generate quote$/i }).click();
+    await page.getByRole("button", { name: /^continue$/i }).click();
     await expect(page.getByText("Requirements complete")).toBeVisible();
     await expect(page.getByText("Inventory resolved")).toBeVisible();
     await expect(page.getByText("Margin within policy")).toBeVisible();

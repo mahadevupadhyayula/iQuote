@@ -6,6 +6,8 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
 import type { QuoteItemRecord } from "@/lib/schemas/shared-records";
 import { decideApprovalActionSchema, type DecideApprovalActionInput } from "@/lib/schemas/approval-actions";
+import { createApprovalService } from "@/lib/services/approval-service";
+import { calculateQuote } from "@/lib/services/quote-calculation-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 
 const money = (amount: number) => Math.round(amount * 100) / 100;
@@ -45,6 +47,9 @@ const quoteTotals = (items: Pick<QuoteItemRecord, "quantity" | "unit_price" | "d
   return { subtotal: money(subtotal), discount: money(discount), total: money(subtotal - discount) };
 };
 
+const roleRank = { product_manager: 1, sales_director: 2, finance: 3 } as const;
+const canApproveRequirement = (approverRole: string, requiredRole: string | null) => !requiredRole || (roleRank[approverRole as keyof typeof roleRank] ?? 0) >= (roleRank[requiredRole as keyof typeof roleRank] ?? 999);
+
 export async function decideApproval(input: DecideApprovalActionInput) {
   const data = decideApprovalActionSchema.parse(input);
   const { repositories, workflowService } = getContext();
@@ -66,11 +71,16 @@ export async function decideApproval(input: DecideApprovalActionInput) {
   }
 
   let updatedQuote = quote;
+  const previousDiscountBps = quote.subtotal_amount > 0 ? Math.round((quote.discount_amount / quote.subtotal_amount) * 10_000) : 0;
+  let modifiedEvaluation = null as Awaited<ReturnType<ReturnType<typeof createApprovalService>["evaluatePolicy"]>> | null;
+  let modifiedMarginBps: number | null = null;
   if (data.decision === "approve_with_modified_discount") {
-    const items = await repositories.quotes.replaceItems(
-      data.quote_id,
-      quote.items.map((item) => recalculateLineWithDiscount(item, data.modified_discount_bps)),
-    );
+    const recalculatedLines = quote.items.map((item) => recalculateLineWithDiscount(item, data.modified_discount_bps));
+    const calculation = calculateQuote(recalculatedLines.map((item) => ({ quantity: item.quantity, unitPriceCents: Math.round(item.unit_price * 100), unitCostCents: Math.round(Number(item.metadata.unit_cost ?? 0) * 100), discountBps: item.discount_bps })));
+    modifiedMarginBps = calculation.grossMarginBps;
+    modifiedEvaluation = await createApprovalService(repositories.prices).evaluatePolicy({ requestedDiscountBps: data.modified_discount_bps, projectedMarginBps: calculation.grossMarginBps });
+    if (!canApproveRequirement(approval.required_role, modifiedEvaluation.requiredRole)) throw new Error("Modified discount is outside this approver role delegated authority.");
+    const items = await repositories.quotes.replaceItems(data.quote_id, recalculatedLines);
     const totals = quoteTotals(items);
     updatedQuote = {
       ...(await repositories.quotes.update(data.quote_id, {
@@ -82,7 +92,11 @@ export async function decideApproval(input: DecideApprovalActionInput) {
           approval_modified_discount: {
             approval_id: approval.id,
             approver_id: data.actor_id ?? null,
-            discount_bps: data.modified_discount_bps,
+            previous_discount_bps: previousDiscountBps,
+            modified_discount_bps: data.modified_discount_bps,
+            projected_margin_bps: modifiedMarginBps,
+            evaluation: modifiedEvaluation,
+            decided_at: new Date().toISOString(),
           },
         },
       })),
@@ -108,7 +122,10 @@ export async function decideApproval(input: DecideApprovalActionInput) {
           action: data.decision,
           approval_id: decidedApproval.id,
           required_role: decidedApproval.required_role,
+          previous_discount_bps: previousDiscountBps,
           modified_discount_bps: data.decision === "approve_with_modified_discount" ? data.modified_discount_bps : null,
+          projected_margin_bps: modifiedMarginBps,
+          evaluation: modifiedEvaluation,
         },
         idempotencyKey: data.idempotency_key,
       })

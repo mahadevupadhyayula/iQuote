@@ -32,7 +32,7 @@ test.describe("scenario C: inventory exception resolution", () => {
     await page.getByLabel("Valid until").fill("2026-09-30");
     await page.getByLabel("Request text").fill(requestText);
 
-    await page.getByRole("button", { name: /create draft and run extraction/i }).click();
+    await page.getByRole("button", { name: /extract and build quote/i }).click();
 
     const createdAlert = page.getByText(/Draft Q-\d+ created/i);
     await expect(createdAlert).toBeVisible({ timeout: 30_000 });
@@ -73,7 +73,7 @@ test.describe("scenario C: inventory exception resolution", () => {
     expect(await getSummaryAmount(page, "Subtotal")).toEqual(originalSubtotal);
     expect(await getSummaryAmount(page, "Total")).toEqual(originalTotal);
 
-    await page.getByRole("button", { name: /^generate quote$/i }).click();
+    await page.getByRole("button", { name: /^continue$/i }).click();
     await expect(page.getByText("Requirements complete")).toBeVisible();
     await expect(page.getByText("Product configuration valid")).toBeVisible();
     await expect(page.getByText("Pricing current")).toBeVisible();

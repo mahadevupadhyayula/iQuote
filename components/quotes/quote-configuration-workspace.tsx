@@ -29,6 +29,7 @@ import {
   FulfillmentButton,
   QuoteWorkflowActions,
 } from "@/components/quotes/quote-workspace-actions";
+import { ReviseQuoteForm } from "@/components/quotes/revise-quote-form";
 
 const currency = (amount: number, code = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(
@@ -456,6 +457,15 @@ export function QuoteConfigurationWorkspace({
           {quote.status.replaceAll("_", " ")}
         </Badge>
       </header>
+      {quote.status === "rejected" ? (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader><CardTitle>Approval rejected</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm text-red-900">
+            <p>{quote.approvalStatus.approvals.find((approval) => approval.status === "rejected")?.comments ?? "The approver rejected this quote."}</p>
+            <ReviseQuoteForm quoteId={quote.id} />
+          </CardContent>
+        </Card>
+      ) : null}
       <ExceptionCards quote={quote} />
       <WorkspaceGrid
         left={<RequirementsCard quote={quote} />}
