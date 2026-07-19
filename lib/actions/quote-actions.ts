@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { createQuoteExtractionAdapter } from "@/lib/adapters/ai/quote-extraction-adapter";
 import { createMockNotificationsAdapter } from "@/lib/adapters/mocks";
@@ -14,6 +15,7 @@ import { createInventoryService } from "@/lib/services/inventory-service";
 import { createExtractionService } from "@/lib/services/extraction-service";
 import { createProductMatchingService } from "@/lib/services/product-matching-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
+import { createQuoteCommercialConfigurationService } from "@/lib/services/quote-commercial-configuration-service";
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
@@ -221,7 +223,9 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
     productsRepository: repositories.products,
   });
   const inventoryDecision = await inventoryService.evaluateAvailability({ product, quantity: targetItem.quantity, allowSplitFulfillment: true });
-  const items = quote.items.map((item) => item.line_number === data.line_number ? { ...item, metadata: { ...item.metadata, inventory_decision: inventoryDecision, selected_fulfillment: data.fulfillment } } : item);
+  const fulfillment = data.fulfillment ?? inventoryDecision.fulfillment;
+  if (fulfillment.length === 0 || inventoryDecision.blocked) throw new Error(inventoryDecision.reason ?? `Inventory is not fulfillable for quote line ${data.line_number}.`);
+  const items = quote.items.map((item) => item.line_number === data.line_number ? { ...item, metadata: { ...item.metadata, inventory_decision: inventoryDecision, selected_inventory_decision: { ...inventoryDecision, fulfillment }, selected_fulfillment: fulfillment, inventory_confirmed_at: new Date().toISOString() } } : item);
   const replacementItems = items.map((item): QuoteItemCreateInput => {
     const { id, created_at, ...replacementItem } = item as QuoteItemRecord;
     void id;
@@ -283,8 +287,23 @@ export async function saveQuoteDraft(input: SaveQuoteDraftActionInput) {
 
 export async function continueQuoteConfiguration(input: ContinueQuoteConfigurationActionInput) {
   const data = continueQuoteConfigurationActionSchema.parse(input);
-  const { workflowService } = getContext();
-  const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "configuring", actorId: data.actor_id ?? null, payload: { action: "continue_quote_configuration" }, idempotencyKey: data.idempotency_key });
+  const { repositories, workflowService } = getContext();
+  const commercialService = createQuoteCommercialConfigurationService(repositories);
+  const result = await commercialService.configureQuoteCommercials({ quoteId: data.quote_id, actorId: data.actor_id ?? null });
+  const configurationBlockerCodes = new Set(["missing_required_information", "invalid_product", "missing_price", "missing_price_source", "stale_price", "pricing_exception", "missing_unit_cost", "unresolved_inventory", "stale_inventory", "missing_commercial_calculation", "discount_policy_not_evaluated", "approval_outcome_missing", "margin_policy_failed", "blocking_exception"]);
+  const blockers = result.readiness.blockers.filter((blocker) => configurationBlockerCodes.has(blocker.code));
+  if (blockers.length > 0) {
+    throw new Error(`Configuration has unresolved blockers: ${blockers.map((blocker) => blocker.message).join(" ")}`);
+  }
+  const requiredRole = result.approvalEvaluation.requiredRole;
+  if (requiredRole) {
+    await repositories.approvals.request({ quote_id: data.quote_id, required_role: requiredRole, requested_by: data.actor_id ?? null, metadata: { evaluation: result.approvalEvaluation }, idempotency_key: `configuration-${data.quote_id}-${requiredRole}` });
+  }
+  const latest = await repositories.quotes.findById(data.quote_id);
+  if (!latest) throw new Error(`Quote ${data.quote_id} was not found.`);
+  if (latest.status !== (requiredRole ? "pending_approval" : "approved")) {
+    await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: requiredRole ? "pending_approval" : "approved", actorId: data.actor_id ?? null, payload: { action: "continue_from_configuration", evaluation: result.approvalEvaluation, effective_discount_bps: result.effectiveDiscountBps, projected_margin_bps: result.calculation.grossMarginBps }, idempotencyKey: data.idempotency_key ?? `continue-configuration-${data.quote_id}` });
+  }
   revalidatePath(quotePath(data.quote_id));
-  return result.quote;
+  redirect(requiredRole ? `/quotes/${data.quote_id}/approval-pending` : `/quotes/${data.quote_id}/generate`);
 }
