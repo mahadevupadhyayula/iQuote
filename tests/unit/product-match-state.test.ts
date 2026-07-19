@@ -13,6 +13,23 @@ describe("normalizeProductMatchState", () => {
     expect(normalizeProductMatchState({ product_match: { method: "exact_alias", confidence: 0.99, product_id: productId } })).toMatchObject({ confirmed: true, requiresConfirmation: false });
   });
 
+
+  it("confirms current deterministic SKU matches", () => {
+    expect(normalizeProductMatchState({ product_match: { method: "sku", confidence: 1, ambiguous: false, product_id: productId } })).toMatchObject({ confirmed: true, requiresConfirmation: false });
+  });
+
+  it("confirms current deterministic product name matches", () => {
+    expect(normalizeProductMatchState({ product_match: { method: "product_name", confidence: 0.99, ambiguous: false, product_id: productId } })).toMatchObject({ confirmed: true, requiresConfirmation: false });
+  });
+
+  it("confirms current deterministic alias matches", () => {
+    expect(normalizeProductMatchState({ product_match: { method: "alias", confidence: 0.99, ambiguous: false, product_id: productId } })).toMatchObject({ confirmed: true, requiresConfirmation: false });
+  });
+
+  it("requires rep confirmation for AI suggestions", () => {
+    expect(normalizeProductMatchState({ product_match: { method: "ai_suggestion", confidence: 1, ambiguous: false, product_id: productId } })).toMatchObject({ confirmed: false, requiresConfirmation: true });
+  });
+
   it("requires confirmation for AI ranked matches", () => {
     expect(normalizeProductMatchState({ product_match: { method: "ai_ranked", confidence: 0.91, product_id: productId } })).toMatchObject({ confirmed: false, requiresConfirmation: true });
   });

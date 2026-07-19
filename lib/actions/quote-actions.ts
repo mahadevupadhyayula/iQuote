@@ -16,7 +16,7 @@ import { createExtractionService } from "@/lib/services/extraction-service";
 import { createProductMatchingService } from "@/lib/services/product-matching-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 import { createQuoteCommercialConfigurationService } from "@/lib/services/quote-commercial-configuration-service";
-import { allInventoryConfirmed, createQuotePricingResolutionService } from "@/lib/services/quote-pricing-resolution-service";
+import { allInventoryConfirmed, createQuotePricingResolutionService, quoteConfigurationCompletion } from "@/lib/services/quote-pricing-resolution-service";
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
@@ -239,12 +239,24 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   let updated = await repositories.quotes.update(data.quote_id, { metadata: { ...quote.metadata, fulfillment_selected_at: new Date().toISOString() } });
   await recordUpdate(updated, data.actor_id, "select_fulfillment", { line_number: data.line_number, fulfillment: data.fulfillment, inventory_decision: inventoryDecision });
   const latest = await repositories.quotes.findById(data.quote_id);
+  const completion = latest ? quoteConfigurationCompletion(latest.items) : null;
+  let pricingStatus = typeof updated.metadata.pricing_status === "string"
+    ? updated.metadata.pricing_status
+    : completion?.allInventorySelectionsApplied === false
+      ? "pending_inventory"
+      : completion?.allProductMatchesConfirmed === false
+        ? "pending_product_confirmation"
+        : "not_started";
+  let pricingBlockers = Array.isArray(updated.metadata.pricing_blockers) ? updated.metadata.pricing_blockers : [];
   if (latest && allInventoryConfirmed(latest.items)) {
     const pricing = await createQuotePricingResolutionService(repositories).resolveQuotePricing({ quoteId: data.quote_id, actorId: data.actor_id ?? null });
     updated = pricing.quote;
+    pricingStatus = typeof updated.metadata.pricing_status === "string" ? updated.metadata.pricing_status : pricing.pricingResolved ? "resolved" : "blocked";
+    pricingBlockers = pricing.blockers;
   }
   revalidatePath(quotePath(data.quote_id));
-  return updated;
+  revalidatePath(`${quotePath(data.quote_id)}/configure`);
+  return { quote: updated, pricingStatus, pricingBlockers };
 }
 
 export async function submitQuoteForApproval(input: SubmitQuoteForApprovalActionInput) {
