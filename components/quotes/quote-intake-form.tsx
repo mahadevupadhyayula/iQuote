@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import type { FieldErrors, Resolver, SubmitHandler } from "react-hook-form";
 import {
@@ -86,6 +86,7 @@ const intakeChecklist = [
 ];
 
 export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
+  const router = useRouter();
   const [result, setResult] = useState<IntakeActionState | null>(null);
   const [isPending, startTransition] = useTransition();
   const form = useForm<QuoteIntakeInput>({
@@ -136,6 +137,15 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
       });
     }
   };
+
+  useEffect(() => {
+    if (!result?.ok) return;
+    if (result.status === "needs_information") {
+      router.push(`/quotes/${result.quoteId}/needs-information`);
+      return;
+    }
+    if (result.status === "configuring") router.push(`/quotes/${result.quoteId}/configure`);
+  }, [result, router]);
 
   const onSubmit: SubmitHandler<QuoteIntakeInput> = (values) => {
     setResult(null);
@@ -456,13 +466,9 @@ function ResultPanel({ result }: { result: IntakeActionState }) {
         <span className="mt-2 block text-xs text-slate-600">
           SLA started {formatDateTime(result.slaStartedAt)} and is due {formatDateTime(result.slaDueAt)}.
         </span>{" "}
-        <Link
-          className="font-semibold text-blue-700 underline"
-          href={`/quotes/${result.quoteId}`}
-        >
-          Continue to review/configuration workspace
-        </Link>
-        .
+        <span className="mt-2 block font-semibold text-blue-700">
+          Navigating to the next quote workspace…
+        </span>
       </AlertDescription>
     </Alert>
   );
