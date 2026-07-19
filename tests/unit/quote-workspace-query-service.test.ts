@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { createQuoteWorkspaceQueryService } from "@/lib/services/quote-workspace-query-service";
+import { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 import type { QuoteWithItems } from "@/lib/repositories/quotes";
 
 const timestamp = "2026-07-18T12:00:00.000Z";
@@ -116,6 +117,55 @@ describe("quote workspace query service", () => {
     const view = await createQuoteWorkspaceQueryService(columnRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
 
     expect(view?.sla).toMatchObject({ startedAt: null, dueAt: "2026-07-19T12:00:00.000Z", policyMinutes: null, breached: false, minutesRemaining: 1440, source: "column" });
+  });
+
+  it("uses the canonical completion rule for inventory and product-match readiness", async () => {
+    const readyQuote = {
+      ...quote,
+      items: [{
+        ...quote.items[0],
+        metadata: {
+          ...quote.items[0].metadata,
+          product_match: { method: "sku", confidence: 1, ambiguous: false, product_id: productId },
+          selected_inventory_decision: { status: "available" },
+          selected_fulfillment: [{ warehouse: "MAIN", quantity: 2 }],
+          inventory_confirmed_at: timestamp,
+        },
+      }],
+    };
+    const readyRepositories = { ...repositories, quotes: { findById: vi.fn(async () => readyQuote) } };
+
+    const view = await createQuoteWorkspaceQueryService(readyRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
+
+    expect(view?.configuration).toMatchObject({
+      inventoryRequiredCount: 1,
+      inventoryResolvedCount: 1,
+      allInventorySelectionsApplied: true,
+      allProductMatchesConfirmed: true,
+      allInventoryConfirmed: true,
+    });
+    expect(view?.configuration.allInventoryConfirmed).toBe(allInventoryConfirmed(readyQuote.items));
+  });
+
+  it("reports product confirmation blockers instead of pending inventory when fulfilment is applied", async () => {
+    const unresolvedQuote = {
+      ...quote,
+      items: [{
+        ...quote.items[0],
+        metadata: {
+          ...quote.items[0].metadata,
+          product_match: { method: "ai_suggestion", confidence: 1, ambiguous: false, product_id: productId },
+          selected_inventory_decision: { status: "available" },
+          selected_fulfillment: [{ warehouse: "MAIN", quantity: 2 }],
+          inventory_confirmed_at: timestamp,
+        },
+      }],
+    };
+    const unresolvedRepositories = { ...repositories, quotes: { findById: vi.fn(async () => unresolvedQuote) } };
+
+    const view = await createQuoteWorkspaceQueryService(unresolvedRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
+
+    expect(view?.configuration).toMatchObject({ allInventorySelectionsApplied: true, allProductMatchesConfirmed: false, allInventoryConfirmed: false, pricingStatus: "pending_product_confirmation" });
   });
 
 });
