@@ -39,11 +39,27 @@ const validatePrice = (price: PriceRecord | null, productId: string, currencyCod
   return null;
 };
 
-export const allInventoryConfirmed = (items: QuoteItemRecord[]) => items.every((item) => {
-  const productState = normalizeProductMatchState(item.metadata, item.product_id);
-  const fulfillment = item.metadata.selected_fulfillment;
-  return Boolean(productState.productId && productState.confirmed && item.metadata.selected_inventory_decision && Array.isArray(fulfillment) && fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string");
-});
+export const quoteConfigurationCompletion = (items: QuoteItemRecord[]) => {
+  const inventoryRequiredCount = items.filter((item) => Boolean(item.product_id)).length;
+  const inventoryResolvedCount = items.filter((item) => {
+    const fulfillment = item.metadata.selected_fulfillment;
+    return Boolean(item.product_id && item.metadata.selected_inventory_decision && Array.isArray(fulfillment) && fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string");
+  }).length;
+  const allInventorySelectionsApplied = inventoryRequiredCount > 0 && inventoryRequiredCount === inventoryResolvedCount;
+  const allProductMatchesConfirmed = items.every((item) => {
+    const productState = normalizeProductMatchState(item.metadata, item.product_id);
+    return Boolean(productState.productId && productState.confirmed);
+  });
+  return {
+    inventoryRequiredCount,
+    inventoryResolvedCount,
+    allInventorySelectionsApplied,
+    allProductMatchesConfirmed,
+    allInventoryConfirmed: allInventorySelectionsApplied && allProductMatchesConfirmed,
+  };
+};
+
+export const allInventoryConfirmed = (items: QuoteItemRecord[]) => quoteConfigurationCompletion(items).allInventoryConfirmed;
 
 export const createQuotePricingResolutionService = (repositories: QuotePricingResolutionRepositories) => ({
   async resolveQuotePricing({ quoteId, actorId = null, onDate = new Date().toISOString().slice(0, 10) }: { quoteId: string; actorId?: string | null; onDate?: string }) {
