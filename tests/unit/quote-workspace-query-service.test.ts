@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { createQuoteWorkspaceQueryService } from "@/lib/services/quote-workspace-query-service";
-import { allInventoryConfirmed } from "@/lib/services/quote-pricing-resolution-service";
+import { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 import type { QuoteWithItems } from "@/lib/repositories/quotes";
 
 const timestamp = "2026-07-18T12:00:00.000Z";
