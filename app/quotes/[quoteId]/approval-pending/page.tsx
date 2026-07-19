@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BadgePercent, Clock3, ShieldCheck } from "lucide-react";
 
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
@@ -20,6 +20,8 @@ export default async function ApprovalPendingPage({ params }: { params: Promise<
   const repositories = createRepositories(createServerSupabaseClient());
   const quote = await createQuoteWorkspaceQueryService(repositories).getInternalWorkspace(quoteId);
   if (!quote) notFound();
+  if (quote.status === "approved") redirect(`/quotes/${quoteId}/generate`);
+  if (quote.status === "rejected") redirect(`/quotes/${quoteId}/configure?rejected=true`);
   const pendingApproval = quote.approvalStatus.approvals.find((approval) => approval.status === "pending");
   const requestedDiscountBps = quote.subtotalAmount ? Math.round((quote.discountAmount / quote.subtotalAmount) * 10_000) : 0;
 
@@ -33,10 +35,12 @@ export default async function ApprovalPendingPage({ params }: { params: Promise<
         <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-blue-600" /> Pending approval summary</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-sm md:grid-cols-2">
           <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Requested discount</span><strong>{percent(requestedDiscountBps)}</strong></div>
+          <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Straight-through threshold</span><strong>{percent(Number((pendingApproval?.metadata as Record<string, unknown> | undefined)?.evaluation && typeof ((pendingApproval?.metadata as Record<string, unknown>).evaluation as Record<string, unknown>).thresholds === "object" ? (((pendingApproval?.metadata as Record<string, unknown>).evaluation as Record<string, unknown>).thresholds as Record<string, unknown>).straightThroughDiscountBps ?? 0 : 0))}</strong></div>
           <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Projected gross margin</span><strong>{percent(quote.margin.grossMarginBps)} ({currency(quote.margin.grossProfitAmount, quote.currencyCode)})</strong></div>
           <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Required approval role</span><strong>{pendingApproval?.required_role.replaceAll("_", " ") ?? "No pending approval"}</strong></div>
           <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Approval requested</span><strong>{shortDateTime(pendingApproval?.requested_at ?? null)}</strong></div>
           <div className="flex justify-between border-b pb-2"><span className="text-slate-500">Workflow status</span><strong>{quote.status.replaceAll("_", " ")}</strong></div>
+          <div className="md:col-span-2 rounded-lg bg-slate-50 p-3"><span className="font-semibold text-slate-600">Approval reason: </span>{String(((pendingApproval?.metadata as Record<string, unknown> | undefined)?.evaluation as Record<string, unknown> | undefined)?.reason ?? "Requested discount or margin requires delegated approval.")}</div>
           <div className="flex items-center justify-end gap-4"><BadgePercent className="h-4 w-4 text-blue-600" /><Clock3 className="h-4 w-4 text-orange-600" /></div>
         </CardContent>
       </Card>

@@ -19,6 +19,7 @@ import { createQuoteCommercialConfigurationService } from "@/lib/services/quote-
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
+  reviseRejectedQuoteActionSchema,
   createQuoteDraftActionSchema,
   extractAndBuildQuoteActionSchema,
   generateQuoteActionSchema,
@@ -28,6 +29,7 @@ import {
   submitQuoteForApprovalActionSchema,
   type ApplyRepCorrectionsActionInput,
   type ContinueQuoteConfigurationActionInput,
+  type ReviseRejectedQuoteActionInput,
   type CreateQuoteDraftActionInput,
   type ExtractAndBuildQuoteActionInput,
   type GenerateQuoteActionInput,
@@ -274,11 +276,24 @@ export async function generateQuote(input: GenerateQuoteActionInput) {
 
 export async function sendQuote(input: SendQuoteActionInput) {
   const data = sendQuoteActionSchema.parse(input);
-  const { workflowService } = getContext();
-  const receipt = await createMockNotificationsAdapter().send({ to: data.recipient_email, subject: "Your quote is ready", body: data.message ?? "Your quote is ready for review.", channel: "email", metadata: { quote_id: data.quote_id } });
-  const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "sent", actorId: data.actor_id ?? null, payload: { action: "send_quote", receipt }, idempotencyKey: data.idempotency_key });
+  const { repositories, workflowService } = getContext();
+  const quote = await repositories.quotes.findById(data.quote_id);
+  if (!quote) throw new Error(`Quote ${data.quote_id} was not found.`);
+  if (quote.status !== "approved") throw new Error(`Quote ${data.quote_id} is ${quote.status} and cannot be sent.`);
+  const pdfUrl = `/api/quotes/${data.quote_id}/pdf`;
+  const receipt = await createMockNotificationsAdapter().send({ to: data.recipient_email, subject: `Quote ${quote.quote_number} is ready`, body: `${data.message ?? "Your quote is ready for review."}\n\nPDF: ${pdfUrl}`, channel: "email", metadata: { quote_id: data.quote_id, pdf_url: pdfUrl } });
+  await repositories.quotes.update(data.quote_id, { metadata: mergeQuoteMetadata(quote.metadata, { mock_delivery_receipt: { ...receipt, recipient_email: data.recipient_email, message: data.message ?? null, pdf_url: pdfUrl } }) });
+  const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "sent", actorId: data.actor_id ?? null, payload: { action: "send_quote", receipt, recipient_email: data.recipient_email, pdf_url: pdfUrl }, idempotencyKey: data.idempotency_key });
   revalidatePath(quotePath(data.quote_id));
   return { quote: result.quote, receipt };
+}
+
+export async function reviseRejectedQuote(input: ReviseRejectedQuoteActionInput) {
+  const data = reviseRejectedQuoteActionSchema.parse(input);
+  const { workflowService } = getContext();
+  const result = await workflowService.transitionQuote({ quoteId: data.quote_id, toStatus: "draft", actorId: data.actor_id ?? null, payload: { action: "revise_rejected_quote" }, idempotencyKey: data.idempotency_key });
+  revalidatePath(quotePath(data.quote_id));
+  return result.quote;
 }
 
 export async function saveQuoteDraft(input: SaveQuoteDraftActionInput) {
