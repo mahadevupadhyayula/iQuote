@@ -31,8 +31,8 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Net line total | `471040` cents (`512000 - 40960`) |
 | Extended cost | `328000` cents (`82000 * 4`) |
 | Gross profit | `143040` cents (`471040 - 328000`) |
-| Gross margin percentage or basis points | `3036` bps (`round(143040 * 10000 / 471040)`) |
-| Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total available `18` |
+| Gross margin percentage or basis points | `3037` bps (`round(143040 * 10000 / 471040)`) |
+| Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total selected available `10` |
 | Approval result | `straight_through`; no required approval role |
 | Expected persisted quote status | `sent` after status path `draft` → `approved` → `sent` |
 | Expected workflow event | `straight_through` |
@@ -55,7 +55,7 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Extended cost | `328000` cents (`82000 * 4`) |
 | Gross profit | `132800` cents (`460800 - 328000`) |
 | Gross margin percentage or basis points | `2882` bps (`round(132800 * 10000 / 460800)`) |
-| Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total available `18` |
+| Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total selected available `10` |
 | Approval result | Product manager approval required and approved with modified discount `1000` bps |
 | Expected persisted quote status | `sent` after status path `draft` → `pending_approval` → `approved` → `sent` |
 | Expected workflow event | `submit_for_product_manager_approval`, then `approve_modified_discount_1000_bps` |

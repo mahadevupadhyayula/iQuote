@@ -107,12 +107,12 @@ export const demoScenarioContracts: DemoScenarioContract[] = [
     expected: {
       productMatch: { productId: demoProducts.ax200.id, sku: "AX-200", method: "sku", confidenceBps: 10_000 },
       price: { unitPriceCents: 128_000, currencyCode: "USD", priceType: "list", effectiveFrom: "2026-01-01", effectiveTo: null },
-      inventoryDecision: { status: "single_warehouse", blocked: false, availableQuantity: 18, fulfillment: [{ locationCode: "CHI-01", quantity: 4, availableQuantity: 10 }] },
+      inventoryDecision: { status: "single_warehouse", blocked: false, availableQuantity: 10, fulfillment: [{ locationCode: "CHI-01", quantity: 4, availableQuantity: 10 }] },
       discountDecision: { requestedDiscountBps: 800, approvedDiscountBps: 800, approvalRequirement: "straight_through", requiredRole: null },
       approvalPath: ["straight_through"],
       quoteStatusPath: ["draft", "approved", "sent"],
       readinessResult: { ready: true, status: "ready", blockerCodes: [] },
-      finalTotals: { subtotalCents: 512_000, discountAmountCents: 40_960, sellPriceCents: 471_040, costCents: 328_000, grossProfitCents: 143_040, grossMarginBps: 3_036 },
+      finalTotals: { subtotalCents: 512_000, discountAmountCents: 40_960, sellPriceCents: 471_040, costCents: 328_000, grossProfitCents: 143_040, grossMarginBps: 3_037 },
     },
   },
   {
@@ -130,7 +130,7 @@ export const demoScenarioContracts: DemoScenarioContract[] = [
     expected: {
       productMatch: { productId: demoProducts.ax200.id, sku: "AX-200", method: "sku", confidenceBps: 10_000 },
       price: { unitPriceCents: 128_000, currencyCode: "USD", priceType: "list", effectiveFrom: "2026-01-01", effectiveTo: null },
-      inventoryDecision: { status: "single_warehouse", blocked: false, availableQuantity: 18, fulfillment: [{ locationCode: "CHI-01", quantity: 4, availableQuantity: 10 }] },
+      inventoryDecision: { status: "single_warehouse", blocked: false, availableQuantity: 10, fulfillment: [{ locationCode: "CHI-01", quantity: 4, availableQuantity: 10 }] },
       discountDecision: { requestedDiscountBps: 1200, approvedDiscountBps: 1000, approvalRequirement: "product_manager", requiredRole: "product_manager" },
       approvalPath: ["submit_for_product_manager_approval", "approve_modified_discount_1000_bps"],
       quoteStatusPath: ["draft", "pending_approval", "approved", "sent"],
