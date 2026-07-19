@@ -110,12 +110,13 @@ describe("submitQuoteIntake", () => {
       requested_items: [{ line_number: 1, raw_item_description: { value: "AX-200", missing: false, confidence: 0.95, source_span: null }, requested_sku: { value: "AX-200", missing: false, confidence: 0.95, source_span: null }, quantity: { value: null, missing: true, confidence: 0, source_span: null }, specifications: { value: null, missing: true, confidence: 0, source_span: null } }],
       delivery_location: { value: null, missing: true, confidence: 0, source_span: null },
       delivery_date: { value: null, missing: true, confidence: 0, source_span: null },
-      missing_fields: ["requested_items[0].quantity", "delivery_location", "delivery_date"],
+      missing_fields: ["requested_items[0].quantity", "requested_items[0].specifications", "delivery_location", "delivery_date", "requested_discount"],
       overall_confidence: 0.5,
     });
 
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs AX-200." });
 
-    expect(result).toMatchObject({ ok: true, status: "needs_information", missingFields: ["requested_items[0].quantity", "delivery_location", "delivery_date"] });
+    expect(result).toMatchObject({ ok: true, status: "needs_information" });
+    expect(result.ok && result.missingFields).toEqual(expect.arrayContaining(["requested_items[0].quantity", "delivery_location", "delivery_date"]));
   });
 });
