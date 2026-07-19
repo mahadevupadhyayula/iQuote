@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { applyRepCorrections, continueQuoteConfiguration, saveQuoteDraft, selectFulfillment } from "@/app/quotes/[quoteId]/actions";
@@ -16,6 +17,13 @@ const serializeLines = (quote: InternalQuoteWorkspaceViewModel) => quote.lines.m
   discount_bps: line.discountBps,
   metadata: { internal_notes: line.internalNotes, inventory_decision: line.inventoryDecision, unit_cost: line.unitCost },
 }));
+const disabledReason = (quote: InternalQuoteWorkspaceViewModel) => {
+  if (quote.configuration.canContinue) return null;
+  if (!quote.configuration.allInventoryConfirmed) return "Apply all inventory recommendations before continuing.";
+  if (quote.configuration.pricingBlockers.length > 0 || quote.configuration.pricingStatus === "blocked") return "Resolve pricing errors before continuing.";
+  if (!quote.configuration.pricingResolved) return "Resolve pricing before continuing.";
+  return quote.readiness.blockers[0]?.message ?? "Complete required configuration before continuing.";
+};
 
 export function CorrectionForm({ quote }: Props) {
   const [pending, startTransition] = useTransition();
@@ -46,23 +54,46 @@ export function CorrectionForm({ quote }: Props) {
 }
 
 export function FulfillmentButton({ quote, lineNumber }: Props & { lineNumber: number }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const line = quote.lines.find((item) => item.lineNumber === lineNumber);
   const productId = line?.productId;
-  return <Button variant="outline" size="sm" disabled={pending || !productId} onClick={() => {
-    if (!productId) return;
+  if (line?.inventoryApplied && line.inventoryConfirmedAt) return <div className="text-sm font-semibold text-emerald-700"><span aria-label="Applied">✓ Applied</span></div>;
+  return <div className="space-y-2"><Button variant="outline" size="sm" disabled={pending || !productId} onClick={() => {
+    if (!productId || pending) return;
     startTransition(async () => {
-      await selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber });
+      setError(null);
+      try {
+        await selectFulfillment({ quote_id: quote.id, actor_id: actorId, line_number: lineNumber });
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to apply inventory recommendation.");
+      }
     });
-  }}>{pending ? "Saving..." : "Use recommended"}</Button>;
+  }}>{pending ? "Applying..." : "Use recommended"}</Button>{error ? <p className="text-xs text-red-600" role="alert">{error}</p> : null}</div>;
 }
 
 export function QuoteWorkflowActions({ quote }: Props) {
+  const router = useRouter();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const run = (name: string, action: () => Promise<unknown>) => startTransition(async () => { setPendingAction(name); await action(); setPendingAction(null); });
-  return <div className="space-y-3">
-    <Button className="w-full" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button>
-    <Button variant="outline" className="w-full" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button>
-  </div>;
+  const run = (name: string, action: () => Promise<unknown>) => {
+    if (isPending) return;
+    startTransition(async () => {
+      setPendingAction(name);
+      setError(null);
+      try {
+        await action();
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Unable to ${name}.`);
+      } finally {
+        setPendingAction(null);
+      }
+    });
+  };
+  const reason = disabledReason(quote);
+  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reason ? <p className="text-right text-sm text-slate-600">{reason}</p> : null}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
 }

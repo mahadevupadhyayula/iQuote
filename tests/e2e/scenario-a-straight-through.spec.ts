@@ -44,18 +44,17 @@ test.describe("scenario A: straight-through Atlas Manufacturing quote", () => {
     await expect(page.getByText("Sep 15, 2026")).toBeVisible();
     await expect(page.getByText("8%")).toBeVisible();
 
+    await expect(page.getByRole("heading", { name: "Quote Configuration" })).toBeVisible();
+    await expect(page.getByText(/Recommended fulfilment/i)).toBeVisible();
     await page.getByRole("button", { name: /use recommended/i }).first().click();
-    await expect(page.getByText("Inventory has a saved recommendation")).toBeVisible();
-    await expect(page.getByText(/split fulfillment/i)).toBeVisible();
-    await expect(page.getByText(/Chicago/i)).toBeVisible();
-    await expect(page.getByText(/Houston/i)).toBeVisible();
+    await expect(page.getByText("✓ Applied")).toBeVisible();
+    await expect(page.getByRole("button", { name: /use recommended/i })).toHaveCount(0);
+    await expect(page.getByText("Pricing resolved")).toBeVisible();
+    await expect(page.getByRole("table").filter({ hasText: "Price source" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quote Summary" })).toBeVisible();
 
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText("Requirements complete")).toBeVisible();
-    await expect(page.getByText("Inventory resolved")).toBeVisible();
-    await expect(page.getByText("Margin within policy")).toBeVisible();
-    await expect(page.getByText("Terms accepted")).toBeVisible();
-    await expect(page.getByText(/approved/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/quotes\/[^/]+\/generate$/);
 
     const quoteId = new URL(page.url()).pathname.split("/")[2];
     const pdfResponse = await request.get(`/api/quotes/${quoteId}/pdf`);
