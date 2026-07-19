@@ -1,6 +1,7 @@
 import "server-only";
 
 import { evaluateQuoteReadiness } from "@/lib/rules/readiness-rules";
+import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import type { ApprovalsRepository } from "@/lib/repositories/approvals";
 import type { PricesRepository } from "@/lib/repositories/prices";
@@ -15,7 +16,8 @@ import type { BasisPoints } from "@/lib/utils/money";
 export type CommercialConfigurationRepositories = {
   approvals: Pick<ApprovalsRepository, "listByQuote">;
   inventory: Parameters<typeof createInventoryService>[0]["inventoryRepository"];
-  prices: Pick<PricesRepository, "findCurrentPrice" | "listActiveDiscountPolicies">;
+  prices: Pick<PricesRepository, "findCustomerSpecificPrice" | "findCustomerTierPrice" | "findListPrice" | "listActiveDiscountPolicies">;
+  customers: { findById(id: string): Promise<{ metadata: Record<string, unknown> } | null> };
   products: Pick<ProductsRepository, "findById" | "listSubstitutes">;
   quotes: Pick<QuotesRepository, "findById" | "replaceItems" | "update">;
   workflowEvents: Pick<WorkflowEventsRepository, "record">;
@@ -27,19 +29,15 @@ const money = (cents: number) => Math.round(cents) / 100;
 const cents = (amount: number) => Math.round(amount * 100);
 const metadataObject = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const numberMeta = (metadata: Record<string, unknown>, key: string, fallback = 0) => typeof metadata[key] === "number" ? metadata[key] as number : fallback;
-const requiresConfirmation = (metadata: Record<string, unknown>) => {
-  const match = metadataObject(metadata.product_match);
-  const method = typeof match.method === "string" ? match.method : "unmatched";
-  const confidence = typeof match.confidence === "number" ? match.confidence : 0;
-  const confirmed = metadataObject(metadata.product_confirmation).confirmed === true;
-  return method === "unmatched" || method === "ai_ranked" || confidence < 1 ? !confirmed : false;
-};
+const customerTier = (metadata: Record<string, unknown>) => typeof metadata.customer_tier === "string" ? metadata.customer_tier : null;
 
 export const createQuoteCommercialConfigurationService = (repositories: CommercialConfigurationRepositories) => ({
   async configureQuoteCommercials({ quoteId, actorId = null, onDate = new Date().toISOString().slice(0, 10) }: ConfigureInput) {
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) throw new Error(`Quote ${quoteId} was not found.`);
 
+    const customer = await repositories.customers.findById(quote.customer_id);
+    const tier = customer ? customerTier(customer.metadata) : null;
     const products = (await Promise.all(quote.items.map((item) => item.product_id ? repositories.products.findById(item.product_id) : null))).filter((p): p is NonNullable<typeof p> => Boolean(p));
     const productsById = new Map(products.map((product) => [product.id, product]));
     const inventoryService = createInventoryService({ inventoryRepository: repositories.inventory, productsRepository: repositories.products });
@@ -54,16 +52,17 @@ export const createQuoteCommercialConfigurationService = (repositories: Commerci
       let unitCost = numberMeta(metadata, "unit_cost");
       let priceMetadata = metadataObject(metadata.price_application);
 
-      if (product && requiresConfirmation(metadata)) {
+      const productState = normalizeProductMatchState(metadata, item.product_id);
+      if (product && !productState.confirmed) {
         blockingExceptions.push({ code: "unresolved_product_match", message: `Quote line ${item.line_number} requires rep confirmation for the ERP product match.`, blocking: true, productId: product.id });
       }
 
-      if (product && !requiresConfirmation(metadata)) {
-        const price = await repositories.prices.findCurrentPrice(product.id, quote.currency_code, onDate);
+      if (product && productState.confirmed) {
+        const price = await repositories.prices.findCustomerSpecificPrice({ productId: product.id, customerId: quote.customer_id, currencyCode: quote.currency_code, onDate }) ?? (tier ? await repositories.prices.findCustomerTierPrice({ productId: product.id, customerTier: tier, currencyCode: quote.currency_code, onDate }) : null) ?? await repositories.prices.findListPrice({ productId: product.id, currencyCode: quote.currency_code, onDate });
         if (price) {
           unitPrice = price.unit_price;
           unitCost = price.unit_cost;
-          priceMetadata = { product_id: product.id, price_id: price.id, currency_code: price.currency_code, effective_from: price.effective_from, effective_to: price.effective_to, source_name: price.source_name, source_version: price.source_version, applied_at: new Date().toISOString() };
+          priceMetadata = { product_id: product.id, price_id: price.id, price_type: price.price_type, customer_id: quote.customer_id, customer_tier: tier, currency_code: price.currency_code, effective_from: price.effective_from, effective_to: price.effective_to, source_name: price.source_name, source_version: price.source_version, applied_at: new Date().toISOString() };
           events.push(repositories.workflowEvents.record({ quote_id: quote.id, event_type: "updated", actor_id: actorId, from_status: quote.status, to_status: quote.status, payload: { action: "price_application", line_number: item.line_number, price: priceMetadata } }));
         }
 
