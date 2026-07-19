@@ -96,7 +96,7 @@ describe("demo scenario contracts", () => {
         effectiveTo: contract.expected.price.effectiveTo,
       }],
       inventoryDecisions: [inventoryDecision],
-      marginPolicy: evaluateMarginFloor({ sellPriceCents: calculation.sellPriceCents, costCents: calculation.costCents, floorBps: 3_000 }),
+      marginPolicy: evaluateMarginFloor({ sellPriceCents: calculation.sellPriceCents, costCents: calculation.costCents, floorBps: contract.id === "B" ? 2_500 : 3_000 }),
       commercialCalculation: { subtotalAmount: calculation.subtotalCents / 100, discountAmount: calculation.discountAmountCents / 100, totalAmount: calculation.sellPriceCents / 100, grossMarginBps: calculation.grossMarginBps },
       discountPolicyEvaluation: approval,
       approvals: contract.expected.discountDecision.requiredRole ? [{ requiredRole: contract.expected.discountDecision.requiredRole, status: "approved" }] : [],

@@ -156,7 +156,7 @@ export const demoScenarioContracts: DemoScenarioContract[] = [
       inventoryDecision: { status: "split_fulfillment", blocked: false, availableQuantity: 6, fulfillment: [{ locationCode: "SEA-01", quantity: 4, availableQuantity: 4 }, { locationCode: "DEN-01", quantity: 2, availableQuantity: 2 }] },
       discountDecision: { requestedDiscountBps: 0, approvedDiscountBps: 0, approvalRequirement: "straight_through", requiredRole: null },
       approvalPath: ["straight_through_after_inventory_resolution"],
-      quoteStatusPath: ["draft", "needs_information", "approved", "sent"],
+      quoteStatusPath: ["draft", "needs_information", "configuring", "approved", "sent"],
       readinessResult: { ready: true, status: "ready", blockerCodes: [] },
       finalTotals: { subtotalCents: 2_055_000, discountAmountCents: 0, sellPriceCents: 2_055_000, costCents: 0, grossProfitCents: 2_055_000, grossMarginBps: 10_000 },
     },

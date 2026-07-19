@@ -80,5 +80,5 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Gross margin percentage or basis points | `10000` bps (`2055000 * 10000 / 2055000`) |
 | Inventory source warehouse allocation | `SEA-01`: quantity `4` from `4` available; `DEN-01`: quantity `2` from `2` available; `split_fulfillment`; total available `6` |
 | Approval result | `straight_through` after inventory resolution; no required approval role |
-| Expected persisted quote status | `sent` after status path `draft` → `needs_information` → `approved` → `sent` |
+| Expected persisted quote status | `sent` after status path `draft` → `needs_information` → `configuring` → `approved` → `sent` |
 | Expected workflow event | `straight_through_after_inventory_resolution` |
