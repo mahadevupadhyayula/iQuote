@@ -35,7 +35,7 @@ export const extractedRequestedItemSchema = z
   })
   .strict();
 
-const clarificationQuestionSchema = z.object({ field: z.string().min(1), question: z.string().min(1) }).strict();
+const clarificationQuestionSchema = z.object({ field: z.string().min(1), question: z.string().min(1), answerType: z.enum(["boolean", "number", "percentage", "text", "textarea", "date", "select"]).optional(), answer_type: z.enum(["boolean", "number", "percentage", "text", "textarea", "date", "select"]).optional(), required: z.boolean().optional(), options: z.array(z.object({ value: z.string(), label: z.string() })).optional(), unit: z.string().optional(), minimum: z.number().optional(), maximum: z.number().optional(), step: z.number().optional(), helpText: z.string().optional() }).strict();
 const ambiguitySchema = z.object({ field: z.string().min(1), description: z.string().min(1) }).strict();
 
 type ExtractedField = { value: unknown; missing: boolean };

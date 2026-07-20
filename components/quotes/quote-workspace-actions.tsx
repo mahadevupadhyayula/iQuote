@@ -22,7 +22,7 @@ const disabledReason = (quote: InternalQuoteWorkspaceViewModel) => {
   if (!quote.configuration.allInventoryConfirmed) return "Apply all inventory recommendations before continuing.";
   if (quote.configuration.pricingBlockers.length > 0 || quote.configuration.pricingStatus === "blocked") return "Resolve pricing errors before continuing.";
   if (!quote.configuration.pricingResolved) return "Resolve pricing before continuing.";
-  return quote.readiness.blockers[0]?.message ?? "Complete required configuration before continuing.";
+  return quote.configuration.blockers[0]?.message ?? "Complete required configuration before continuing.";
 };
 
 export function CorrectionForm({ quote }: Props) {
@@ -95,5 +95,5 @@ export function QuoteWorkflowActions({ quote }: Props) {
     });
   };
   const reason = disabledReason(quote);
-  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reason ? <p className="text-right text-sm text-slate-600">{reason}</p> : null}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
+  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reason ? <p className="text-right text-sm text-slate-600">{reason}</p> : <p className="text-right text-sm text-emerald-700">Configuration complete. Continue will evaluate approval requirements.</p>}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
 }

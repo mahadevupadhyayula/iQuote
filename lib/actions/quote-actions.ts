@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createQuoteExtractionAdapter } from "@/lib/adapters/ai/quote-extraction-adapter";
 import { createMockNotificationsAdapter } from "@/lib/adapters/mocks";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import { evaluateConfigurationContinuation } from "@/lib/rules/configuration-continuation";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import { evaluateQuoteReadiness } from "@/lib/rules/readiness-rules";
 import { createRepositories } from "@/lib/repositories";
@@ -672,25 +673,19 @@ export async function continueQuoteConfiguration(
     quoteId: data.quote_id,
     actorId: data.actor_id ?? null,
   });
-  const configurationBlockerCodes = new Set([
-    "missing_required_information",
-    "invalid_product",
-    "missing_price",
-    "missing_price_source",
-    "stale_price",
-    "pricing_exception",
-    "missing_unit_cost",
-    "unresolved_inventory",
-    "stale_inventory",
-    "missing_commercial_calculation",
-    "discount_policy_not_evaluated",
-    "approval_outcome_missing",
-    "margin_policy_failed",
-    "blocking_exception",
-  ]);
-  const blockers = result.readiness.blockers.filter((blocker) =>
-    configurationBlockerCodes.has(blocker.code),
-  );
+  const completion = quoteConfigurationCompletion(result.items);
+  const pricingBlockers = Array.isArray(result.quote.metadata.pricing_blockers)
+    ? (result.quote.metadata.pricing_blockers as Array<{ code: string; message: string }>)
+    : [];
+  const continuation = evaluateConfigurationContinuation({
+    readinessBlockers: result.readiness.blockers,
+    pricingResolved: result.items.length > 0 && result.items.every((item) => item.metadata.pricing_resolved === true),
+    pricingBlockers,
+    allProductMatchesConfirmed: completion.allProductMatchesConfirmed,
+    allInventorySelectionsApplied: completion.allInventorySelectionsApplied,
+    commercialTotalsExist: result.quote.subtotal_amount >= 0 && result.quote.total_amount >= 0,
+  });
+  const blockers = continuation.blockers;
   if (blockers.length > 0) {
     throw new Error(
       `Configuration has unresolved blockers: ${blockers.map((blocker) => blocker.message).join(" ")}`,

@@ -10,7 +10,7 @@ const asObject = (value: unknown): Record<string, unknown> => value && typeof va
 const asString = (value: unknown) => typeof value === "string" && value.length > 0 ? value : null;
 const asNumber = (value: unknown, fallback = 0) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
-const deterministicMethods = ["sku", "exact_sku", "sku_exact", "deterministic_sku", "product_name", "exact_name", "name_exact", "alias", "exact_alias", "alias_exact", "replacement", "substitute", "deterministic_match", "manual"];
+const deterministicMethods = ["sku", "exact_sku", "sku_exact", "deterministic_sku", "product_name", "exact_name", "name_exact", "alias", "exact_alias", "alias_exact", "replacement", "substitute", "deterministic_match", "manual", "rep_selected"];
 const aiOrUnresolvedMethods = ["ai_suggestion", "ai_ranked", "unmatched", "ambiguous"];
 
 const candidateProductId = (candidate: Record<string, unknown>) => asString(candidate.product_id) ?? asString(candidate.productId) ?? asString(asObject(candidate.product).id);
