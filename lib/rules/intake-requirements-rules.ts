@@ -55,7 +55,7 @@ export const toIntakeRequirementsMetadata = (extraction: ExtractionOutput, lines
       inventory_decision: line.inventoryDecision ?? null,
       requested_discount_bps: line.requestedDiscountBps ?? 0,
       approval_required: line.approvalRequired ?? false,
-      review_required: !line.deterministicResolution.product || Boolean(line.inventoryDecision?.blocked) || Boolean(line.approvalRequired),
+      review_required: line.quantity === null || !line.deterministicResolution.product || Boolean(line.inventoryDecision?.blocked) || Boolean(line.approvalRequired),
     })),
   },
 });

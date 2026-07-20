@@ -4,6 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/server", () => ({ createServerSupabaseClient: vi.fn(() => ({ mocked: true })) }));
 
+vi.mock("@/lib/pdf/render-quote-pdf", () => ({
+  renderQuotePdf: vi.fn(async (quote: { quoteNumber: string }) => ({
+    buffer: new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52]),
+    fileName: `quote-${quote.quoteNumber}.pdf`,
+    contentType: "application/pdf",
+    document: { quote: { revisionNumber: "Revision 1" } },
+  })),
+}));
+
 const timestamp = "2026-07-18T12:00:00.000Z";
 const quoteId = "11111111-1111-4111-8111-111111111111";
 const customerId = "22222222-2222-4222-8222-222222222222";

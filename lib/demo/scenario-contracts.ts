@@ -52,7 +52,7 @@ export type DemoScenarioContract = {
     quoteStatusPath: QuoteStatus[];
     readinessResult: {
       ready: boolean;
-      status: "ready" | "blocked";
+      status: "ready" | "needs_information" | "blocked";
       blockerCodes: string[];
     };
     finalTotals: {
@@ -188,7 +188,7 @@ export const demoScenarioContracts: DemoScenarioContract[] = [
       discountDecision: { requestedDiscountBps: 0, approvedDiscountBps: 0, approvalRequirement: "straight_through", requiredRole: null },
       approvalPath: ["fulfillment_review_required"],
       quoteStatusPath: ["draft", "reviewing"],
-      readinessResult: { ready: false, status: "blocked", blockerCodes: ["unresolved_inventory"] },
+      readinessResult: { ready: false, status: "needs_information", blockerCodes: ["unresolved_inventory"] },
       finalTotals: { subtotalCents: 2_432_000, discountAmountCents: 0, sellPriceCents: 2_432_000, costCents: 1_558_000, grossProfitCents: 874_000, grossMarginBps: 3_594 },
     },
   },
