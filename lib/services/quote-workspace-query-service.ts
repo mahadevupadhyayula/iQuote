@@ -53,6 +53,13 @@ export type CustomerQuoteLineViewModel = {
   grossAmount: number;
   discountPercentage: number;
   netAmount: number;
+  resolutionStatus: "unresolved" | "selected" | "unavailable";
+  requestedSku: string | null;
+  requestedDescription: string;
+  selectedSku: string | null;
+  selectedProductName: string | null;
+  quotable: boolean;
+  unavailableReason: string | null;
 };
 
 export type CustomerQuoteViewModel = {
@@ -77,6 +84,7 @@ export type CustomerQuoteViewModel = {
   validUntil: string | null;
   sentAt: string | null;
   acceptedAt: string | null;
+  metadata: Record<string, unknown>;
   lines: CustomerQuoteLineViewModel[];
 };
 
@@ -301,9 +309,48 @@ const reviewMetadata = (
   };
 };
 
+
+const customerPdfMetadata = (metadata: Record<string, unknown>) => {
+  const requirements = metadataObject(metadata.requirements);
+  const commercial = metadataObject(requirements.commercial);
+  const review = metadataObject(metadata.review);
+  return {
+    revision_number: metadata.revision_number,
+    company: metadata.company,
+    prepared_by: metadata.prepared_by,
+    customer_notes: metadata.customer_notes,
+    delivery_location: metadata.delivery_location,
+    delivery_and_fulfilment: metadata.delivery_and_fulfilment,
+    installation_requirement: metadata.installation_requirement,
+    payment_terms: metadata.payment_terms,
+    reviewed_workflow: metadata.reviewed_workflow,
+    review: {
+      delivery_location: review.delivery_location,
+      delivery_and_fulfilment: review.delivery_and_fulfilment,
+      installation_requirement: review.installation_requirement,
+      payment_terms: review.payment_terms,
+      prepared_by_name: review.prepared_by_name,
+      prepared_by_title: review.prepared_by_title,
+      prepared_by_email: review.prepared_by_email,
+      prepared_by_phone: review.prepared_by_phone,
+      special_requirements: review.special_requirements,
+    },
+    requirements: {
+      commercial: {
+        delivery_location: commercial.delivery_location,
+        delivery_and_fulfilment: commercial.delivery_and_fulfilment,
+        installation_requirement: commercial.installation_requirement,
+        payment_terms: commercial.payment_terms,
+        special_requirements: commercial.special_requirements,
+      },
+    },
+  };
+};
+
 const toCustomer = (
   quote: QuoteWithItems,
   customer: CustomerRecord | null,
+  productById = new Map<string, { name: string; description: string | null; sku: string }>(),
 ): CustomerQuoteViewModel => ({
   id: quote.id,
   quoteNumber: quote.quote_number,
@@ -327,16 +374,19 @@ const toCustomer = (
   validUntil: quote.valid_until,
   sentAt: quote.sent_at,
   acceptedAt: quote.accepted_at,
+  metadata: customerPdfMetadata(quote.metadata),
   lines: quote.items
     .slice()
     .sort((left, right) => left.line_number - right.line_number)
-    .map((item) => ({
+    .map((item) => {
+      const product = item.product_id ? productById.get(item.product_id) : null;
+      return ({
       id: item.id,
       lineNumber: item.line_number,
       sku: item.sku,
       description: item.description,
-      productName: null,
-      catalogDescription: null,
+      productName: product?.name ?? null,
+      catalogDescription: product?.description ?? null,
       customerRequestedDescription: item.description,
       customerSpecifications: null,
       quantity: item.quantity,
@@ -347,7 +397,15 @@ const toCustomer = (
       grossAmount: money(cents(item.unit_price) * item.quantity),
       discountPercentage: item.discount_bps / 100,
       netAmount: item.line_total_amount,
-    })),
+      resolutionStatus: getQuoteLineResolution(item).status === "unresolved" && item.product_id && !isUnavailableLine(item) ? "selected" : getQuoteLineResolution(item).status,
+      requestedSku: typeof item.metadata.original_requested_sku === "string" ? item.metadata.original_requested_sku : item.sku,
+      requestedDescription: typeof item.metadata.original_requested_description === "string" ? item.metadata.original_requested_description : item.description,
+      selectedSku: item.product_id ? item.sku : null,
+      selectedProductName: product?.name ?? null,
+      quotable: isQuotableLine(item) || (!item.metadata.line_resolution && !isUnavailableLine(item) && Boolean(item.product_id)),
+      unavailableReason: isUnavailableLine(item) ? "Not currently available for this quote." : null,
+    });
+    }),
 });
 
 const approvalStatus = (
@@ -436,10 +494,11 @@ export const createQuoteWorkspaceQueryService = (
   ): Promise<CustomerQuoteViewModel | null> {
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) return null;
-    return toCustomer(
-      { ...quote, items: quote.items.filter((item) => !isUnavailableLine(item)) },
-      await repositories.customers.findById(quote.customer_id),
-    );
+    const customer = await repositories.customers.findById(quote.customer_id);
+    const productIds = [...new Set(quote.items.map((item) => item.product_id).filter((id): id is string => Boolean(id)))];
+    const products = await Promise.all(productIds.map((id) => repositories.products.findById(id)));
+    const productById = new Map(products.filter((product): product is NonNullable<typeof product> => Boolean(product)).map((product) => [product.id, product]));
+    return toCustomer(quote, customer, productById);
   },
 
   async getInternalWorkspace(
