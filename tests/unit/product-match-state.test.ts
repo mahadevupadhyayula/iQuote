@@ -41,4 +41,8 @@ describe("normalizeProductMatchState", () => {
   it("normalizes legacy deterministic_match metadata", () => {
     expect(normalizeProductMatchState({ deterministic_match: { id: productId, confidence: 1 } })).toMatchObject({ productId, confirmed: true, requiresConfirmation: false });
   });
+
+  it("treats rep-selected matches as deterministic confirmations", () => {
+    expect(normalizeProductMatchState({ product_match: { method: "rep_selected", confidence: 1, ambiguous: false, product_id: productId } })).toMatchObject({ confirmed: true, requiresConfirmation: false });
+  });
 });

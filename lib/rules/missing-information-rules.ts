@@ -1,12 +1,31 @@
 import { z } from "zod";
 
 export type MissingFieldControl = "text" | "number" | "date" | "select" | "textarea" | "product_candidate";
+export type ClarificationAnswerType = "boolean" | "number" | "percentage" | "text" | "textarea" | "date" | "select";
 
 export type MissingFieldDefinition = {
   key: string;
   label: string;
   control: MissingFieldControl;
   required: boolean;
+  unit?: string;
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+  helpText?: string;
+};
+
+export type ClarificationQuestion = {
+  field: string;
+  question: string;
+  answerType: ClarificationAnswerType;
+  required?: boolean;
+  options?: Array<{ value: string; label: string }>;
+  unit?: string;
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+  helpText?: string;
 };
 
 export const missingInformationFieldRegistry = {
@@ -18,7 +37,7 @@ export const missingInformationFieldRegistry = {
   "requested_items[].specifications": { key: "requested_items[].specifications", label: "Specifications", control: "textarea", required: false },
   delivery_location: { key: "delivery_location", label: "Delivery location", control: "text", required: true },
   delivery_date: { key: "delivery_date", label: "Delivery date", control: "date", required: true },
-  requested_discount: { key: "requested_discount", label: "Requested discount", control: "text", required: false },
+  requested_discount: { key: "requested_discount", label: "Requested discount", control: "number", required: false, unit: "percent", minimum: 0, maximum: 100, step: 0.1, helpText: "Enter 8 for an 8% discount." },
   installation_requirement: { key: "installation_requirement", label: "Installation requirement", control: "select", required: false },
   special_requirements: { key: "special_requirements", label: "Special requirements", control: "textarea", required: false },
 } as const satisfies Record<string, MissingFieldDefinition>;
@@ -39,13 +58,13 @@ export const getMissingFieldDefinition = (path: string): NormalizedMissingField 
 };
 
 const pathSchema = z.string().min(1).transform(normalizeMissingFieldPath);
-const valueSchema = z.union([z.string(), z.number(), z.null()]);
+const valueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const completeMissingInformationSchema = z.object({
   quoteId: z.string().uuid().or(z.string().min(1)),
   intent: z.enum(["continue", "draft"]).default("continue"),
   fields: z.record(pathSchema, valueSchema).default({}),
-  clarificationAnswers: z.record(z.string(), z.string()).default({}),
+  clarificationAnswers: z.record(z.string(), valueSchema).default({}),
   productSelections: z.record(z.string(), z.object({
     productId: z.string().nullable(),
     sku: z.string().nullable().optional(),

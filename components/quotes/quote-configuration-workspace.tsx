@@ -74,6 +74,15 @@ const fulfillment = (line: InternalQuoteLineViewModel) =>
   asArray(line.selectedFulfillment).length > 0
     ? asArray(line.selectedFulfillment)
     : asArray(asObject(line.inventoryRecommendation).fulfillment);
+const productMatchLabel = (method: string, confirmed: boolean) => {
+  if (method === "sku" || method === "exact_sku") return "Exact SKU";
+  if (method === "product_name") return "Product name match";
+  if (method === "alias" || method === "exact_alias") return "Alias match";
+  if (method === "rep_selected" || method === "manual") return "Rep selected";
+  if (method === "ai_suggestion" && confirmed) return "AI recommendation confirmed";
+  return method.replaceAll("_", " ");
+};
+const lineTitle = (line: InternalQuoteLineViewModel) => line.productName ?? line.sku ?? "Unmatched product";
 const priceTypeLabel = (value: string | null) =>
   value === "customer_specific"
     ? "Customer-specific"
@@ -126,7 +135,7 @@ function RequirementsCard({
     ["Opportunity", quote.opportunityId ?? "Not provided"],
     [
       "Requested products",
-      quote.lines.map((line) => line.description).join(", ") || "No lines",
+      quote.lines.map((line) => lineTitle(line)).join(", ") || "No lines",
     ],
     [
       "Quantity",
@@ -140,11 +149,7 @@ function RequirementsCard({
     ["Required date", shortDate(quote.validUntil)],
     [
       "Requested discount",
-      percent(
-        quote.subtotalAmount
-          ? Math.round((quote.discountAmount / quote.subtotalAmount) * 10_000)
-          : 0,
-      ),
+      quote.requirementsSummary.requestedDiscountBps == null ? "Not requested" : percent(quote.requirementsSummary.requestedDiscountBps),
     ],
     ["Currency", quote.currencyCode],
   ];
@@ -207,11 +212,13 @@ function InventoryResolutionSection({
           <div key={line.id} className="rounded-lg border p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-semibold">{line.description}</div>
+                <div className="font-semibold">{lineTitle(line)}</div>
                 <div className="text-xs text-slate-500">SKU: {line.sku}</div>
                 <div className="text-sm text-slate-600">
                   Requested quantity: {line.quantity}
                 </div>
+                {line.customerRequestedDescription ? <div className="text-sm text-slate-600">Requested as: {line.customerRequestedDescription}</div> : null}
+                {line.customerSpecifications ? <div className="text-sm text-slate-600">Customer specification: {line.customerSpecifications}</div> : null}
                 <div className="mt-2 text-xs text-slate-600">
                   Matched-product state:{" "}
                   <strong>
@@ -221,8 +228,7 @@ function InventoryResolutionSection({
                   </strong>
                 </div>
                 <div className="text-xs text-slate-600">
-                  Match method and confidence: {line.productMatchMethod} ·{" "}
-                  {Math.round(line.productMatchConfidence * 100)}%
+                  Match method and confidence: {productMatchLabel(line.productMatchMethod, line.productMatchConfirmed)} · {Math.round(line.productMatchConfidence * 100)}%
                 </div>
               </div>
               <Badge className="bg-white text-slate-700">
@@ -360,7 +366,7 @@ function PricingResolutionTable({
             {quote.lines.map((line) => (
               <TableRow key={line.id}>
                 <TableCell>
-                  <div>{line.description}</div>
+                  <div>{lineTitle(line)}</div>
                   <div className="text-xs text-slate-500">
                     {line.sku} ·{" "}
                     {fulfillment(line).map(fulfillmentLabel).join(", ")}
@@ -454,7 +460,7 @@ function QuoteSummaryCard({
               </span>
             </div>
             <div className="flex justify-between text-sm text-red-600">
-              <span>Discount</span>
+              <span>Applied discount</span>
               <span>
                 -
                 {currency(

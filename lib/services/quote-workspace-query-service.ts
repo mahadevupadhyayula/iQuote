@@ -1,5 +1,6 @@
 import "server-only";
 
+import { evaluateConfigurationContinuation } from "@/lib/rules/configuration-continuation";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
@@ -39,6 +40,10 @@ export type CustomerQuoteLineViewModel = {
   lineNumber: number;
   sku: string;
   description: string;
+  productName: string | null;
+  catalogDescription: string | null;
+  customerRequestedDescription: string | null;
+  customerSpecifications: string | null;
   quantity: number;
   unitPrice: number;
   discountBps: BasisPoints;
@@ -172,6 +177,11 @@ export type InternalQuoteWorkspaceViewModel = Omit<
     pricingResolved: boolean;
     pricingBlockers: Array<PricingBlocker>;
     canContinue: boolean;
+    blockers: Array<{ code: string; message: string }>;
+  };
+  requirementsSummary: {
+    requestedDiscountPercent: number | null;
+    requestedDiscountBps: number | null;
   };
   reviewMetadata: {
     extraction: Record<string, unknown>;
@@ -274,6 +284,10 @@ const toCustomer = (
       lineNumber: item.line_number,
       sku: item.sku,
       description: item.description,
+      productName: null,
+      catalogDescription: null,
+      customerRequestedDescription: item.description,
+      customerSpecifications: null,
       quantity: item.quantity,
       unitPrice: item.unit_price,
       discountBps: item.discount_bps,
@@ -422,9 +436,7 @@ export const createQuoteWorkspaceQueryService = (
       costCents: calculated.costCents,
       floorBps,
     });
-    const readiness =
-      (quote.metadata.readiness as QuoteReadinessEvaluation | undefined) ??
-      evaluateQuoteReadiness({
+    const readiness = evaluateQuoteReadiness({
         customerId: quote.customer_id,
         currencyCode: quote.currency_code,
         lines: quote.items.map((item) => ({
@@ -452,11 +464,20 @@ export const createQuoteWorkspaceQueryService = (
           status: approval.status,
         })),
         paymentTerms: quote.metadata.payment_terms as never,
+        slaDueAt: quote.sla_due_at,
+        quoteStatus: quote.status,
+        commercialCalculation: { subtotalAmount: money(calculated.subtotalCents), discountAmount: money(calculated.discountAmountCents), totalAmount: money(calculated.netTotalCents), grossMarginBps: calculated.grossMarginBps },
+        discountPolicyEvaluation: quote.metadata.approval_evaluation as never,
       });
     const calculationsByLineId = new Map(
       calculated.lines.map((line) => [line.lineId, line]),
     );
     const customerView = toCustomer(quote, customer);
+    const productById = new Map(products.filter((product): product is NonNullable<typeof product> => Boolean(product)).map((product) => [product.id, product]));
+    const requirements = metadataObject(quote.metadata.requirements);
+    const commercialRequirements = metadataObject(requirements.commercial);
+    const requestedDiscountPercent = typeof commercialRequirements.requested_discount_percent === "number" ? commercialRequirements.requested_discount_percent : null;
+    const requestedDiscountBps = typeof commercialRequirements.requested_discount_bps === "number" ? commercialRequirements.requested_discount_bps : null;
     const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers)
       ? (quote.metadata.pricing_blockers as PricingBlocker[])
       : [];
@@ -481,6 +502,8 @@ export const createQuoteWorkspaceQueryService = (
               ? "pending_product_confirmation"
               : "not_started";
 
+    const configurationContinuation = evaluateConfigurationContinuation({ readinessBlockers: readiness.blockers, pricingResolved, pricingBlockers, allProductMatchesConfirmed, allInventorySelectionsApplied, commercialTotalsExist: quote.items.length > 0 && calculated.subtotalCents >= 0 });
+
     return {
       ...customerView,
       opportunityId: quote.opportunity_id,
@@ -492,6 +515,8 @@ export const createQuoteWorkspaceQueryService = (
         const calculation = calculationsByLineId.get(line.id);
         const item = quote.items.find((candidate) => candidate.id === line.id);
         const metadata = item?.metadata ?? {};
+        const product = item?.product_id ? productById.get(item.product_id) : null;
+        const customerRequirements = metadataObject(metadata.customer_requirements);
         const priceApplication = metadataObject(metadata.price_application);
         const productMatch = normalizeProductMatchState(
           metadata,
@@ -500,6 +525,10 @@ export const createQuoteWorkspaceQueryService = (
         return {
           ...line,
           productId: item?.product_id ?? null,
+          productName: product?.name ?? null,
+          catalogDescription: product?.description ?? null,
+          customerRequestedDescription: item?.description ?? null,
+          customerSpecifications: metadataString(customerRequirements, "specifications"),
           unitCost: money(calculation?.unitCostCents ?? 0),
           lineCost: money(calculation?.costCents ?? 0),
           grossProfit: money(calculation?.grossProfitCents ?? 0),
@@ -559,9 +588,10 @@ export const createQuoteWorkspaceQueryService = (
         pricingStatus,
         pricingResolved,
         pricingBlockers,
-        canContinue:
-          readiness.ready && pricingResolved && pricingBlockers.length === 0,
+        canContinue: configurationContinuation.canContinue,
+        blockers: configurationContinuation.blockers,
       },
+      requirementsSummary: { requestedDiscountPercent, requestedDiscountBps },
       internalNotes: quote.metadata.internal_notes,
       reviewMetadata: reviewMetadata(quote.metadata),
     };

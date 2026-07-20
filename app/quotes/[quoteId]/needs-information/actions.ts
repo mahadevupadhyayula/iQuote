@@ -12,7 +12,8 @@ type ActionResult = { ok: true; quoteId: string; status: string } | { ok: false;
 
 const objectValue = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const arrayValue = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
-const textValue = (value: unknown) => typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+const textValue = (value: unknown) => typeof value === "string" && value.trim().length > 0 ? value.trim() : typeof value === "boolean" ? (value ? "Yes" : "No") : null;
+const percentToBps = (value: number) => Math.round(value * 100);
 const numberValue = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
 
 const withFieldValue = (field: unknown, value: unknown) => ({ ...objectValue(field), value, missing: isBlankMissingInformationValue(value) });
@@ -27,7 +28,8 @@ const mergeMetadata = (quote: QuoteWithItems, data: ReturnType<typeof completeMi
   const requestedItems = arrayValue(fields.requested_items);
   const persistedRequestedItems = arrayValue(requirementDetails.requested_items);
 
-  for (const [rawPath, rawValue] of Object.entries(data.fields)) {
+  const canonicalValues = { ...data.fields, ...data.clarificationAnswers };
+  for (const [rawPath, rawValue] of Object.entries(canonicalValues)) {
     if (isBlankMissingInformationValue(rawValue)) continue;
     const path = normalizeMissingFieldPath(rawPath);
     const definition = getMissingFieldDefinition(path);
@@ -42,6 +44,15 @@ const mergeMetadata = (quote: QuoteWithItems, data: ReturnType<typeof completeMi
       fields[path] = withFieldValue(fields[path], value);
       customerRequest[path] = withFieldValue(customerRequest[path], value);
       if (path === "opportunity_name") metadata.opportunity_name = value;
+      if (path === "requested_discount") {
+        const requestedDiscountPercent = numberValue(value);
+        if (requestedDiscountPercent != null) {
+          const requestedDiscountBps = percentToBps(requestedDiscountPercent);
+          customerRequest.requested_discount = { value: requestedDiscountPercent, unit: "percent", source: "rep_clarification" };
+          const commercial = objectValue(requirements.commercial);
+          requirements.commercial = { ...commercial, requested_discount_percent: requestedDiscountPercent, requested_discount_bps: requestedDiscountBps };
+        }
+      }
     }
   }
 
@@ -56,7 +67,7 @@ const mergeMetadata = (quote: QuoteWithItems, data: ReturnType<typeof completeMi
     };
   }
 
-  const answered = Object.fromEntries(Object.entries(data.clarificationAnswers).filter(([, answer]) => answer.trim().length > 0));
+  const answered = Object.fromEntries(Object.entries(data.clarificationAnswers).filter(([, answer]) => !isBlankMissingInformationValue(answer)));
   const remainingMissing = (Array.isArray(extraction.missing_fields) ? extraction.missing_fields : []).map(String).map(normalizeMissingFieldPath).filter((path) => isBlankMissingInformationValue(data.fields[path]));
 
   return {
@@ -71,19 +82,31 @@ const mergeItems = (quote: QuoteWithItems, data: ReturnType<typeof completeMissi
   const prefix = `requested_items[${index}]`;
   const quantity = numberValue(data.fields[`${prefix}.quantity`]);
   const requestedSku = textValue(data.fields[`${prefix}.requested_sku`]);
-  const specifications = textValue(data.fields[`${prefix}.specifications`]);
+  const specifications = textValue(data.fields[`${prefix}.specifications`] ?? data.clarificationAnswers[`${prefix}.specifications`]);
+  const quoteDiscountPercent = numberValue(data.fields.requested_discount ?? data.clarificationAnswers.requested_discount);
+  if (quoteDiscountPercent != null && (quoteDiscountPercent < 0 || quoteDiscountPercent > 100)) throw new Error("Requested discount must be between 0 and 100 percent.");
+  const quoteDiscountBps = quoteDiscountPercent == null ? null : percentToBps(quoteDiscountPercent);
   const selection = data.productSelections[prefix];
   return {
     product_id: selection?.unresolved ? item.product_id : selection?.productId ?? item.product_id,
     line_number: item.line_number,
     sku: selection?.unresolved ? item.sku : selection?.sku ?? requestedSku ?? item.sku,
-    description: selection?.unresolved ? item.description : selection?.description ?? specifications ?? item.description,
+    description: selection?.unresolved ? item.description : selection?.description ?? item.description,
     quantity: quantity ?? item.quantity,
     unit_price: item.unit_price,
-    discount_bps: item.discount_bps,
-    discount_amount: item.discount_amount,
-    line_total_amount: item.line_total_amount,
-    metadata: { ...item.metadata, rep_confirmed_product: selection ? !selection.unresolved : item.metadata.rep_confirmed_product, product_unresolved: selection?.unresolved === true },
+    discount_bps: quoteDiscountBps ?? item.discount_bps,
+    discount_amount: quoteDiscountBps == null ? item.discount_amount : 0,
+    line_total_amount: quoteDiscountBps == null ? item.line_total_amount : 0,
+    metadata: {
+      ...item.metadata,
+      pricing_resolved: quoteDiscountBps == null ? item.metadata.pricing_resolved : false,
+      customer_requirements: specifications ? { ...objectValue(item.metadata.customer_requirements), specifications } : item.metadata.customer_requirements,
+      product_match: selection && !selection.unresolved ? { product_id: selection.productId, method: "rep_selected", confidence: 1, ambiguous: false } : item.metadata.product_match,
+      product_confirmation: selection && !selection.unresolved ? { confirmed: true, product_id: selection.productId, confirmed_at: new Date().toISOString(), confirmation_source: "needs_information" } : item.metadata.product_confirmation,
+      product_confirmed: selection && !selection.unresolved ? true : item.metadata.product_confirmed,
+      rep_confirmed_product: selection ? !selection.unresolved : item.metadata.rep_confirmed_product,
+      product_unresolved: selection?.unresolved === true,
+    },
   };
 });
 
@@ -106,7 +129,8 @@ export async function completeMissingInformation(input: CompleteMissingInformati
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
 
   const metadata = mergeMetadata(quote, data);
-  await repositories.quotes.update(quote.id, { metadata });
+  const hasDiscountChange = numberValue(data.fields.requested_discount ?? data.clarificationAnswers.requested_discount) != null;
+  await repositories.quotes.update(quote.id, { metadata: hasDiscountChange ? { ...metadata, pricing_status: "not_started", pricing_resolved: false, commercial_calculation: null, readiness: null, approval_evaluation: null } : metadata, ...(hasDiscountChange ? { subtotal_amount: 0, discount_amount: 0, total_amount: 0 } : {}) });
   if (quote.items.length > 0) await repositories.quotes.replaceItems(quote.id, mergeItems(quote, data));
   await repositories.workflowEvents.record({ quote_id: quote.id, event_type: "updated", actor_id: null, from_status: quote.status, to_status: quote.status, payload: { action: "missing_information_saved", intent: data.intent } });
 
