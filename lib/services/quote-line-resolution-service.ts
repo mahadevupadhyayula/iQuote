@@ -14,7 +14,7 @@ export type ResolveQuoteLineSelectionInput =
   | { quote_id: string; line_number: number; mode: "unavailable"; reason?: string | null; actor_id?: string | null; idempotency_key?: string };
 
 export type QuoteLineResolutionRepositories = QuotePricingResolutionRepositories & {
-  products: Pick<ProductsRepository, "findById">;
+  products: Pick<ProductsRepository, "findById" | "listSubstitutes">;
   inventory: Pick<InventoryRepository, "listByProduct" | "listByProducts" | "findAtLocation">;
   quotes: QuotePricingResolutionRepositories["quotes"] & Pick<QuotesRepository, "findById" | "replaceItems" | "update">;
   workflowEvents: Pick<WorkflowEventsRepository, "record">;
