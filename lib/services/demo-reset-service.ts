@@ -66,6 +66,15 @@ const demoProducts = [
     metadata: { demo_seed: demoSeed, family: "actuators" },
   },
   {
+    id: "20000000-0000-4000-8000-000000000210",
+    sku: "AX-200-FKIT",
+    name: "AX-200 Compatible Filter Kit",
+    description: "Matched spare filter kit for AX-200 compressor equipment.",
+    status: "active",
+    unit_of_measure: "kit",
+    metadata: { demo_seed: demoSeed, family: "filters", compatible_with: "AX-200" },
+  },
+  {
     id: "20000000-0000-4000-8000-000000000500",
     sku: "HX-500",
     name: "HX-500 Hydraulic Pump",
@@ -97,6 +106,9 @@ const demoProducts = [
 const productAliases = [
   ["20000000-0000-4000-8000-000000000200", "AX200", "customer_csv"],
   ["20000000-0000-4000-8000-000000000200", "Atlas actuator 200", "manual"],
+  ["20000000-0000-4000-8000-000000000200", "AX-200 compressor equipment", "manual"],
+  ["20000000-0000-4000-8000-000000000210", "AX-200 compatible filter kit", "manual"],
+  ["20000000-0000-4000-8000-000000000210", "matching spare filters", "manual"],
   ["20000000-0000-4000-8000-000000000500", "HX500", "customer_csv"],
   ["20000000-0000-4000-8000-000000000500", "Northstar pump", "manual"],
   ["20000000-0000-4000-8000-000000000600", "HX-500 replacement", "manual"],
@@ -105,6 +117,7 @@ const productAliases = [
 
 const prices = [
   ["20000000-0000-4000-8000-000000000200", 1280, "2026-01-01", null],
+  ["20000000-0000-4000-8000-000000000210", 145, "2026-01-01", null],
   ["20000000-0000-4000-8000-000000000500", 3425, "2026-01-01", "2026-09-30"],
   ["20000000-0000-4000-8000-000000000600", 3195, "2026-07-01", null],
   ["20000000-0000-4000-8000-000000000700", 650, "2026-01-01", null],
@@ -119,6 +132,7 @@ const prices = [
 const inventory = [
   ["20000000-0000-4000-8000-000000000200", "CHI-01", 12, 2, 4],
   ["20000000-0000-4000-8000-000000000200", "DAL-02", 8, 0, 3],
+  ["20000000-0000-4000-8000-000000000210", "DAL-02", 20, 2, 5],
   ["20000000-0000-4000-8000-000000000500", "DEN-01", 3, 1, 2],
   ["20000000-0000-4000-8000-000000000500", "SEA-01", 4, 0, 2],
   ["20000000-0000-4000-8000-000000000600", "DEN-01", 6, 1, 2],
@@ -135,10 +149,10 @@ const discountPolicies = [
   {
     id: "30000000-0000-4000-8000-000000000001",
     name: "Atlas volume discount",
-    description: "Manufacturing customers receive 8% off actuator quantities of 10 or more.",
+    description: "Manufacturing customers receive automatic approval up to 8%; discounts through 15% require product-manager approval.",
     policy_type: "percent_off",
     discount_bps: 800,
-    max_discount_bps: 1200,
+    max_discount_bps: 1500,
     amount_off: 0,
     starts_on: "2026-01-01",
     ends_on: null,
@@ -146,7 +160,9 @@ const discountPolicies = [
     metadata: {
       demo_seed: demoSeed,
       customer_external_id: "DEMO-CUST-ATLAS",
-      minimum_quantity: 10,
+      minimum_quantity: 1,
+      automatic_approval_bps: 800,
+      approval_required_above_bps: 800,
     },
   },
   {
@@ -204,7 +220,7 @@ assertNoError(
 );
 
 const opportunityIds =
-  demoOpportunities?.map((opportunity) => opportunity.id) ?? [];
+  demoOpportunities?.map((opportunity: { id: string }) => opportunity.id) ?? [];
 
   const quoteFilters = [`metadata->>demo_seed.eq.${demoSeed}`, `customer_id.in.(${customerIds.join(",")})`];
   if (opportunityIds.length > 0) quoteFilters.push(`opportunity_id.in.(${opportunityIds.join(",")})`);
@@ -213,7 +229,7 @@ const opportunityIds =
     .select("id")
     .or(quoteFilters.join(","));
   assertNoError("Find demo quotes", quoteLookupError);
-  const quoteIds = demoQuotes?.map((quote) => quote.id) ?? [];
+  const quoteIds = demoQuotes?.map((quote: { id: string }) => quote.id) ?? [];
 
   if (quoteIds.length > 0) {
     assertNoError("Delete demo workflow events", (await supabase.from("workflow_events").delete().in("quote_id", quoteIds)).error);

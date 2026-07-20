@@ -163,7 +163,7 @@ function RepConfirmationAndActions({ quote }: Props) {
 
 function ManualEntryNotice({ quote }: Props) {
   if (!quote.reviewMetadata.manualEntry.enabled) return null;
-  return <Card className="border-amber-300 bg-amber-50"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-600" /> Manual-entry path enabled</CardTitle></CardHeader><CardContent className="text-sm text-amber-900">Extraction failed, returned invalid or malformed output, or left required fields incomplete. Enter and save controlled requirements manually before continuing. Reason: {text(quote.reviewMetadata.manualEntry.reason)}.</CardContent></Card>;
+  return <Card className="border-amber-300 bg-amber-50"><CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-600" /> Manual-entry path enabled</CardTitle></CardHeader><CardContent className="text-sm text-amber-900">Extraction failed only when no validated extraction was produced. If extraction completed with missing, ambiguous, or unresolved business data, review those controlled requirements before continuing. Reason: {text(quote.reviewMetadata.manualEntry.reason)}.</CardContent></Card>;
 }
 
 export function QuoteReviewWorkspace({ quote }: Props) {

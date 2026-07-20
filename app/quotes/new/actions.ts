@@ -3,9 +3,12 @@
 import { createQuoteExtractionAdapter } from "@/lib/adapters/ai/quote-extraction-adapter";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
+import { classifyIntakeBusinessReview, type IntakeBusinessReviewStatus } from "@/lib/rules/intake-classification-rules";
+import { evaluateApprovalPolicy } from "@/lib/rules/approval-rules";
 import { toIntakeRequirementsMetadata, toReviewRequiredQuoteItems, type IntakeLinePersistenceInput } from "@/lib/rules/intake-requirements-rules";
 import { quoteIntakeSchema, type QuoteIntakeInput } from "@/lib/schemas/quote-intake";
 import { createExtractionService } from "@/lib/services/extraction-service";
+import { createInventoryService } from "@/lib/services/inventory-service";
 import { createProductResolverService } from "@/lib/services/product-resolver-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 
@@ -35,6 +38,7 @@ export type IntakeActionState =
       manualFallbackState: ManualFallbackState;
       suggestions: string[];
       previewLines: PreviewLine[];
+      businessReviewStatus: IntakeBusinessReviewStatus;
     }
   | { ok: false; error: string; manualFallback: true; suggestions: string[] };
 
@@ -44,11 +48,16 @@ const intakeSlaMinutes = 15;
 const toSuggestions = (missingFields: string[], clarificationQuestions: ClarificationQuestion[]) => {
   if (clarificationQuestions.length > 0) return clarificationQuestions.map((question) => question.question);
   return missingFields.length > 0
-    ? missingFields.map((field) => `Ask the customer for ${field.replace(/[_.[\]]+/g, " ").trim()}.`)
+    ? missingFields.map((field: string) => `Ask the customer for ${field.replace(/[_.[\]]+/g, " ").trim()}.`)
     : ["Review extracted request details, then configure catalog-backed products, pricing, inventory, and approvals before sending."];
 };
 
 const optionalString = (value: string | undefined) => (value && value.length > 0 ? value : null);
+
+const requestedDiscountBps = (value: string | null) => {
+  const match = value?.match(/(\d+(?:\.\d+)?)\s*%/);
+  return match ? Math.round(Number(match[1]) * 100) : 0;
+};
 
 const buildSla = (now = new Date()) => {
   const due = new Date(now.getTime() + intakeSlaMinutes * 60 * 1000);
@@ -125,25 +134,43 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
     }).extractAndPersist({ quoteId: quote.id, sourceText: data.requestText });
 
     const extraction = extractionResult.extraction;
+    let businessReviewStatus: IntakeBusinessReviewStatus = "technical_extraction_failure";
 
     if (extraction) {
       const productResolver = createProductResolverService({ productsRepository: repositories.products });
-      const persistedLines: IntakeLinePersistenceInput[] = await Promise.all(extraction.requested_items.map(async (line) => {
+      const policies = await repositories.prices.listActiveDiscountPolicies();
+      const canEvaluateApproval = policies.some((policy: { active: boolean; policy_type: string }) => policy.active && policy.policy_type === "percent_off");
+      const persistedLines: IntakeLinePersistenceInput[] = await Promise.all(extraction.requested_items.map(async (line: typeof extraction.requested_items[number]) => {
         const requestedSku = line.requested_sku.value;
         const description = line.raw_item_description.value;
         const deterministicResolution = await productResolver.resolve({ sku: requestedSku, alias: requestedSku, description });
         const searchQuery = requestedSku ?? description;
         const candidates = searchQuery ? await repositories.products.search(searchQuery, 5) : [];
+        const quantity = line.quantity.value;
+        const price = deterministicResolution.product
+          ? await repositories.prices.findCurrentPrice(deterministicResolution.product.id, data.currencyCode)
+          : null;
+        const inventoryDecision = deterministicResolution.product && quantity !== null
+          ? await createInventoryService({ inventoryRepository: repositories.inventory, productsRepository: repositories.products }).evaluateAvailability({ product: deterministicResolution.product!, quantity, allowSplitFulfillment: true })
+          : null;
+        const discountBps = requestedDiscountBps(extraction.requested_discount.value);
+        const approvalRequired = canEvaluateApproval
+          ? evaluateApprovalPolicy({ requestedDiscountBps: discountBps, projectedMarginBps: 3_000, policies }).requirement !== "straight_through"
+          : false;
 
         return {
           lineNumber: line.line_number,
           requestedSku,
           description,
-          quantity: line.quantity.value,
+          quantity,
           deterministicResolution,
-          candidates: deterministicResolution.product && candidates.every((candidate) => candidate.id !== deterministicResolution.product?.id)
+          candidates: deterministicResolution.product && candidates.every((candidate: { id: string }) => candidate.id !== deterministicResolution.product?.id)
             ? [deterministicResolution.product, ...candidates].slice(0, 5)
             : candidates,
+          price: price ? { id: price.id, currency_code: price.currency_code, unit_price: price.unit_price, effective_from: price.effective_from, effective_to: price.effective_to } : null,
+          inventoryDecision,
+          requestedDiscountBps: discountBps,
+          approvalRequired,
         };
       }));
 
@@ -156,10 +183,16 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
 
       const reviewItems = toReviewRequiredQuoteItems(persistedLines);
       if (reviewItems.length > 0) await repositories.quotes.replaceItems(quote.id, reviewItems);
+      businessReviewStatus = classifyIntakeBusinessReview({
+        extraction,
+        productResolutions: persistedLines.map((line) => line.deterministicResolution),
+        inventoryDecisions: persistedLines.flatMap((line) => line.inventoryDecision ? [line.inventoryDecision] : []),
+        approvalRequired: persistedLines.some((line) => line.approvalRequired),
+      });
     }
 
     const missingFields = extraction?.missing_fields ?? ["requested_items", "delivery_date", "delivery_location"];
-    const clarificationQuestions = extraction?.clarification_questions ?? missingFields.map((field) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
+    const clarificationQuestions = extraction?.clarification_questions ?? missingFields.map((field: string) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
 
     const failure = "failure" in extractionResult ? extractionResult.failure : null;
 
@@ -187,11 +220,12 @@ export async function submitQuoteIntake(input: QuoteIntakeInput): Promise<Intake
         summary: failure?.summary ?? null,
       },
       suggestions: toSuggestions(missingFields, clarificationQuestions),
-      previewLines: extraction?.requested_items.map((line) => ({
+      previewLines: extraction?.requested_items.map((line: typeof extraction.requested_items[number]) => ({
         sku: line.requested_sku.value,
         description: line.raw_item_description.value,
         quantity: line.quantity.value,
       })) ?? [],
+      businessReviewStatus,
     };
   } catch (error) {
   console.error("[quote-intake] failed", error);
