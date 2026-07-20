@@ -1,6 +1,7 @@
 import "server-only";
 
 import { evaluateConfigurationContinuation } from "@/lib/rules/configuration-continuation";
+import { getQuoteLineResolution, isQuotableLine, isUnavailableLine } from "@/lib/domain/quote-line-resolution";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
@@ -30,7 +31,7 @@ export type QuoteWorkspaceQueryRepositories = {
   approvals: Pick<ApprovalsRepository, "listByQuote">;
   customers: Pick<CustomersRepository, "findById">;
   prices: Pick<PricesRepository, "listCurrentPrices">;
-  products: Pick<ProductsRepository, "findById">;
+  products: Pick<ProductsRepository, "findById"> & { listActive?: ProductsRepository["listActive"] };
   quotes: Pick<QuotesRepository, "findById">;
   workflowEvents: Pick<WorkflowEventsRepository, "listByQuote">;
 };
@@ -102,6 +103,14 @@ export type InternalQuoteLineViewModel = CustomerQuoteLineViewModel & {
   productMatchConfirmed: boolean;
   productMatchMethod: string;
   productMatchConfidence: number;
+  resolutionStatus: "unresolved" | "selected" | "unavailable";
+  resolutionSource: "recommended" | "catalogue_selection" | "not_available" | null;
+  selectedProductId: string | null;
+  selectedProductName: string | null;
+  excludedFromPricing: boolean;
+  quotable: boolean;
+  resolutionReason: string | null;
+  inventoryBlocker: string | null;
 };
 
 export type InternalApprovalViewModel = Pick<
@@ -178,7 +187,17 @@ export type InternalQuoteWorkspaceViewModel = Omit<
     pricingBlockers: Array<PricingBlocker>;
     canContinue: boolean;
     blockers: Array<{ code: string; message: string; lineNumber?: number | null; productId?: string | null }>;
+    requestedLineCount: number;
+    selectedLineCount: number;
+    availableSelectedLineCount: number;
+    unavailableLineCount: number;
+    unresolvedLineCount: number;
+    quotableLineCount: number;
+    allLinesResolved: boolean;
+    hasAtLeastOneQuotableLine: boolean;
   };
+  activeCatalogueProducts: Array<{ id: string; sku: string; name: string }>;
+  notIncludedLines: Array<{ lineNumber: number; sku: string; description: string; quantity: number; reason: string | null }>;
   requirementsSummary: {
     requestedDiscountPercent: number | null;
     requestedDiscountBps: number | null;
@@ -418,7 +437,7 @@ export const createQuoteWorkspaceQueryService = (
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) return null;
     return toCustomer(
-      quote,
+      { ...quote, items: quote.items.filter((item) => !isUnavailableLine(item)) },
       await repositories.customers.findById(quote.customer_id),
     );
   },
@@ -445,8 +464,9 @@ export const createQuoteWorkspaceQueryService = (
       repositories.workflowEvents.listByQuote(quote.id),
     ]);
 
+    const calculationItems = quote.items.filter((item) => isQuotableLine(item) || (!item.metadata.line_resolution && !isUnavailableLine(item) && Boolean(item.product_id)));
     const calculated = calculateQuote(
-      quote.items.map((item) => ({
+      calculationItems.map((item) => ({
         lineId: item.id,
         quantity: item.quantity,
         unitPriceCents: cents(item.unit_price),
@@ -471,7 +491,7 @@ export const createQuoteWorkspaceQueryService = (
     const readiness = evaluateQuoteReadiness({
         customerId: quote.customer_id,
         currencyCode: quote.currency_code,
-        lines: quote.items.map((item) => ({
+        lines: calculationItems.map((item) => ({
           productId: item.product_id,
           sku: item.sku,
           description: item.description,
@@ -480,8 +500,8 @@ export const createQuoteWorkspaceQueryService = (
         products: products.filter(
           (product): product is NonNullable<typeof product> => Boolean(product),
         ),
-        prices: appliedReadinessPrices(quote),
-        inventoryDecisions: quote.items
+        prices: appliedReadinessPrices({ ...quote, items: calculationItems }),
+        inventoryDecisions: calculationItems
           .map(
             (item) =>
               item.metadata.selected_inventory_decision ??
@@ -502,7 +522,9 @@ export const createQuoteWorkspaceQueryService = (
     const calculationsByLineId = new Map(
       calculated.lines.map((line) => [line.lineId, line]),
     );
-    const customerView = toCustomer(quote, customer);
+    const customerView = toCustomer({ ...quote, items: calculationItems }, customer);
+    const allCustomerLines = toCustomer(quote, customer).lines;
+    const activeCatalogueProducts = repositories.products.listActive ? await repositories.products.listActive({ limit: 100 }) : [];
     const productById = new Map(products.filter((product): product is NonNullable<typeof product> => Boolean(product)).map((product) => [product.id, product]));
     const requirements = metadataObject(quote.metadata.requirements);
     const commercialRequirements = metadataObject(requirements.commercial);
@@ -511,16 +533,15 @@ export const createQuoteWorkspaceQueryService = (
     const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers)
       ? (quote.metadata.pricing_blockers as PricingBlocker[])
       : [];
+    const completion = quoteConfigurationCompletion(quote.items);
     const {
       inventoryRequiredCount,
       inventoryResolvedCount,
       allInventorySelectionsApplied,
       allProductMatchesConfirmed,
       allInventoryConfirmed,
-    } = quoteConfigurationCompletion(quote.items);
-    const pricingResolved =
-      quote.items.length > 0 &&
-      quote.items.every((item) => item.metadata.pricing_resolved === true);
+    } = completion;
+    const pricingResolved = completion.hasAtLeastOneQuotableLine && completion.allSelectedPricingResolved;
     const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] =
       pricingBlockers.length > 0
         ? "blocked"
@@ -533,7 +554,7 @@ export const createQuoteWorkspaceQueryService = (
               : "not_started";
 
     const commercialTotalsExist =
-      quote.items.length > 0 &&
+      completion.hasAtLeastOneQuotableLine &&
       pricingResolved &&
       Number.isFinite(calculated.subtotalCents) &&
       Number.isFinite(calculated.netTotalCents) &&
@@ -559,7 +580,7 @@ export const createQuoteWorkspaceQueryService = (
       approvedAt: quote.approved_at,
       createdAt: quote.created_at,
       updatedAt: quote.updated_at,
-      lines: customerView.lines.map((line) => {
+      lines: allCustomerLines.map((line) => {
         const calculation = calculationsByLineId.get(line.id);
         const item = quote.items.find((candidate) => candidate.id === line.id);
         const metadata = item?.metadata ?? {};
@@ -570,6 +591,9 @@ export const createQuoteWorkspaceQueryService = (
           metadata,
           item?.product_id ?? null,
         );
+        const resolution = item ? getQuoteLineResolution(item) : null;
+        const quotable = item ? isQuotableLine(item) : false;
+        const unavailable = item ? isUnavailableLine(item) : false;
         return {
           ...line,
           productId: item?.product_id ?? null,
@@ -604,6 +628,14 @@ export const createQuoteWorkspaceQueryService = (
           productMatchConfirmed: productMatch.confirmed,
           productMatchMethod: productMatch.method,
           productMatchConfidence: productMatch.confidence,
+          resolutionStatus: resolution?.status ?? "unresolved",
+          resolutionSource: resolution?.source ?? null,
+          selectedProductId: resolution?.selectedProductId ?? item?.product_id ?? null,
+          selectedProductName: product?.name ?? null,
+          excludedFromPricing: unavailable || metadata.excluded_from_pricing === true,
+          quotable,
+          resolutionReason: resolution?.reason ?? null,
+          inventoryBlocker: typeof metadata.inventory_blocker === "string" ? metadata.inventory_blocker : null,
         };
       }),
       readiness,
@@ -636,10 +668,24 @@ export const createQuoteWorkspaceQueryService = (
         pricingStatus,
         pricingResolved,
         pricingBlockers,
-        canContinue: configurationContinuation.canContinue,
-        blockers: configurationContinuation.blockers,
+        canContinue: completion.canContinue,
+        blockers: [
+          ...completion.unresolvedLineNumbers.map((lineNumber) => ({ code: "unresolved_line", message: `Select a product or mark line ${lineNumber} as Not available.`, lineNumber })),
+          ...(completion.hasAtLeastOneQuotableLine ? [] : [{ code: "no_quotable_lines", message: "At least one requested product must be available to create a quote." }]),
+          ...configurationContinuation.blockers,
+        ],
+        requestedLineCount: completion.requestedLineCount,
+        selectedLineCount: completion.selectedLineCount,
+        availableSelectedLineCount: completion.quotableLineCount,
+        unavailableLineCount: completion.unavailableLineCount,
+        unresolvedLineCount: completion.unresolvedLineCount,
+        quotableLineCount: completion.quotableLineCount,
+        allLinesResolved: completion.allLinesResolved,
+        hasAtLeastOneQuotableLine: completion.hasAtLeastOneQuotableLine,
       },
       requirementsSummary: { requestedDiscountPercent, requestedDiscountBps },
+      activeCatalogueProducts: activeCatalogueProducts.map((product) => ({ id: product.id, sku: product.sku, name: product.name })),
+      notIncludedLines: quote.items.filter(isUnavailableLine).map((item) => ({ lineNumber: item.line_number, sku: String(item.metadata.original_requested_sku ?? item.sku), description: String(item.metadata.original_requested_description ?? item.description), quantity: item.quantity, reason: getQuoteLineResolution(item).reason ?? null })),
       internalNotes: quote.metadata.internal_notes,
       reviewMetadata: reviewMetadata(quote.metadata),
     };

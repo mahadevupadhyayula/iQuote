@@ -22,6 +22,8 @@ import {
   quoteConfigurationCompletion,
 } from "@/lib/rules/quote-configuration-completion";
 import { createQuotePricingResolutionService } from "@/lib/services/quote-pricing-resolution-service";
+import { createQuoteLineResolutionService } from "@/lib/services/quote-line-resolution-service";
+import { isQuotableLine } from "@/lib/domain/quote-line-resolution";
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
@@ -31,6 +33,7 @@ import {
   generateQuoteActionSchema,
   saveQuoteDraftActionSchema,
   selectFulfillmentActionSchema,
+  resolveQuoteLineSelectionActionSchema,
   sendQuoteActionSchema,
   submitQuoteForApprovalActionSchema,
   type ApplyRepCorrectionsActionInput,
@@ -41,6 +44,7 @@ import {
   type GenerateQuoteActionInput,
   type SaveQuoteDraftActionInput,
   type SelectFulfillmentActionInput,
+  type ResolveQuoteLineSelectionActionInput,
   type SendQuoteActionInput,
   type SubmitQuoteForApprovalActionInput,
 } from "@/lib/schemas/quote-action-schemas";
@@ -534,6 +538,15 @@ export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   return { quote: updated, pricingStatus, pricingBlockers };
 }
 
+export async function resolveQuoteLineSelection(input: ResolveQuoteLineSelectionActionInput) {
+  const data = resolveQuoteLineSelectionActionSchema.parse(input);
+  const { repositories } = getContext();
+  const quote = await createQuoteLineResolutionService(repositories).resolveQuoteLineSelection(data);
+  revalidatePath(quotePath(data.quote_id));
+  revalidatePath(`${quotePath(data.quote_id)}/configure`);
+  return quote;
+}
+
 export async function submitQuoteForApproval(
   input: SubmitQuoteForApprovalActionInput,
 ) {
@@ -546,7 +559,7 @@ export async function submitQuoteForApproval(
       ? Math.round((quote.discount_amount / quote.subtotal_amount) * 10_000)
       : 0;
   const marginBps = calculateQuote(
-    quote.items.map((item) => ({
+    quote.items.filter(isQuotableLine).map((item) => ({
       quantity: item.quantity,
       unitPriceCents: Math.round(item.unit_price * 100),
       unitCostCents: Math.round(Number(item.metadata.unit_cost ?? 0) * 100),
@@ -601,7 +614,7 @@ export async function generateQuote(input: GenerateQuoteActionInput) {
   const readiness = evaluateQuoteReadiness({
     customerId: quote.customer_id,
     currencyCode: quote.currency_code,
-    lines: quote.items.map((item) => ({
+    lines: quote.items.filter(isQuotableLine).map((item) => ({
       productId: item.product_id,
       sku: item.sku,
       description: item.description,
@@ -740,13 +753,13 @@ export async function continueQuoteConfiguration(
     : [];
   const continuation = evaluateConfigurationContinuation({
     readinessBlockers: result.readiness.blockers,
-    pricingResolved: result.items.length > 0 && result.items.every((item) => item.metadata.pricing_resolved === true),
+    pricingResolved: completion.hasAtLeastOneQuotableLine && completion.allSelectedPricingResolved,
     pricingBlockers,
     allProductMatchesConfirmed: completion.allProductMatchesConfirmed,
     allInventorySelectionsApplied: completion.allInventorySelectionsApplied,
     commercialTotalsExist:
-      result.items.length > 0 &&
-      result.items.every((item) => item.metadata.pricing_resolved === true) &&
+      completion.hasAtLeastOneQuotableLine &&
+      completion.allSelectedPricingResolved &&
       Number.isFinite(result.calculation.subtotalCents) &&
       Number.isFinite(result.calculation.netTotalCents) &&
       result.calculation.subtotalCents > 0,

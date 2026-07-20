@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { applyRepCorrections, continueQuoteConfiguration, saveQuoteDraft, selectFulfillment } from "@/app/quotes/[quoteId]/actions";
+import { applyRepCorrections, continueQuoteConfiguration, resolveQuoteLineSelection, saveQuoteDraft, selectFulfillment } from "@/app/quotes/[quoteId]/actions";
 import type { InternalQuoteWorkspaceViewModel } from "@/lib/services/quote-workspace-query-service";
 
 type Props = { quote: InternalQuoteWorkspaceViewModel };
@@ -74,6 +74,25 @@ export function FulfillmentButton({ quote, lineNumber }: Props & { lineNumber: n
       }
     });
   }}>{pending ? "Applying..." : "Use recommended"}</Button>{error ? <p className="text-xs text-red-600" role="alert">{error}</p> : null}</div>;
+}
+
+export function LineResolutionControls({ quote, lineNumber }: Props & { lineNumber: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [selected, setSelected] = useState<string>(quote.lines.find((item) => item.lineNumber === lineNumber)?.selectedProductId ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const apply = (mode: "recommended" | "catalogue" | "unavailable", productId?: string) => {
+    startTransition(async () => {
+      setError(null);
+      try {
+        await resolveQuoteLineSelection(mode === "catalogue" ? { quote_id: quote.id, actor_id: actorId, line_number: lineNumber, mode, product_id: productId ?? "" } : mode === "unavailable" ? { quote_id: quote.id, actor_id: actorId, line_number: lineNumber, mode } : { quote_id: quote.id, actor_id: actorId, line_number: lineNumber, mode });
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to resolve line.");
+      }
+    });
+  };
+  return <div className="space-y-2"><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => apply("recommended")}>Use recommendation</Button><select aria-label={`Select catalogue product for line ${lineNumber}`} className="rounded-md border px-2 py-1 text-sm" value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Select catalogue product</option>{quote.activeCatalogueProducts.map((product) => <option key={product.id} value={product.id}>{product.sku} — {product.name}</option>)}<option value="__not_available__">Not available</option></select><Button variant="outline" size="sm" disabled={pending || !selected} onClick={() => selected === "__not_available__" ? apply("unavailable") : apply("catalogue", selected)}>Apply selection</Button></div>{error ? <p className="text-xs text-red-600" role="alert">{error}</p> : null}</div>;
 }
 
 export function QuoteWorkflowActions({ quote }: Props) {

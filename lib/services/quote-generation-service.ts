@@ -35,7 +35,7 @@ export const createQuoteGenerationService = (repositories: QuoteGenerationReposi
         customers: repositories.customers,
         approvals: { listByQuote: async () => [] },
         prices: { listCurrentPrices: async () => [] },
-        products: { findById: async () => null },
+        products: { findById: async () => null, listActive: async () => [] },
         workflowEvents: { listByQuote: async () => [] },
       });
       const customerQuote = await queryService.getCustomerQuote(quoteId);

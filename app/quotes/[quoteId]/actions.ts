@@ -9,6 +9,7 @@ import {
   saveQuoteDraft as saveQuoteDraftAction,
   reviseRejectedQuote as reviseRejectedQuoteAction,
   selectFulfillment as selectFulfillmentAction,
+  resolveQuoteLineSelection as resolveQuoteLineSelectionAction,
   sendQuote as sendQuoteAction,
   submitQuoteForApproval as submitQuoteForApprovalAction,
 } from "@/lib/actions/quote-actions";
@@ -21,6 +22,7 @@ import type {
   SaveQuoteDraftActionInput,
   ReviseRejectedQuoteActionInput,
   SelectFulfillmentActionInput,
+  ResolveQuoteLineSelectionActionInput,
   SendQuoteActionInput,
   SubmitQuoteForApprovalActionInput,
 } from "@/lib/schemas/quote-action-schemas";
@@ -51,6 +53,10 @@ export async function saveQuoteDraft(input: SaveQuoteDraftActionInput) {
 
 export async function selectFulfillment(input: SelectFulfillmentActionInput) {
   return selectFulfillmentAction(input);
+}
+
+export async function resolveQuoteLineSelection(input: ResolveQuoteLineSelectionActionInput) {
+  return resolveQuoteLineSelectionAction(input);
 }
 
 export async function sendQuote(input: SendQuoteActionInput) {

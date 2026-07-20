@@ -34,6 +34,7 @@ const repository = (overrides: Record<string, unknown> = {}) => ({
   listSubstitutes: vi.fn(async () => []),
   findReplacement: vi.fn(async () => null),
   search: vi.fn(async () => []),
+  listActive: vi.fn(async () => []),
   addAlias: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
