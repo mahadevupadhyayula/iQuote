@@ -17,13 +17,15 @@ const serializeLines = (quote: InternalQuoteWorkspaceViewModel) => quote.lines.m
   discount_bps: line.discountBps,
   metadata: { internal_notes: line.internalNotes, inventory_decision: line.inventoryDecision, unit_cost: line.unitCost },
 }));
-const disabledReason = (quote: InternalQuoteWorkspaceViewModel) => {
-  if (quote.configuration.canContinue) return null;
-  if (!quote.configuration.allInventoryConfirmed) return "Apply all inventory recommendations before continuing.";
-  if (quote.configuration.pricingBlockers.length > 0 || quote.configuration.pricingStatus === "blocked") return "Resolve pricing errors before continuing.";
-  if (!quote.configuration.pricingResolved) return "Resolve pricing before continuing.";
-  return quote.configuration.blockers[0]?.message ?? "Complete required configuration before continuing.";
+const disabledReasons = (quote: InternalQuoteWorkspaceViewModel) => {
+  if (quote.configuration.canContinue) return [];
+  if (quote.configuration.blockers.length > 0) {
+    return quote.configuration.blockers.map((blocker) => blocker.message);
+  }
+  return ["Complete the remaining quote configuration before continuing."];
 };
+
+const uniqueFirstThree = (messages: string[]) => [...new Set(messages)].slice(0, 3);
 
 export function CorrectionForm({ quote }: Props) {
   const [pending, startTransition] = useTransition();
@@ -94,6 +96,6 @@ export function QuoteWorkflowActions({ quote }: Props) {
       }
     });
   };
-  const reason = disabledReason(quote);
-  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, lines: serializeLines(quote), metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reason ? <p className="text-right text-sm text-slate-600">{reason}</p> : <p className="text-right text-sm text-emerald-700">Configuration complete. Continue will evaluate approval requirements.</p>}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
+  const reasons = uniqueFirstThree(disabledReasons(quote));
+  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reasons.length > 0 ? <div className="space-y-1 text-right text-sm text-slate-600">{reasons.map((reason) => <p key={reason}>{reason}</p>)}</div> : <p className="text-right text-sm text-emerald-700">Configuration complete. Continue will evaluate approval requirements.</p>}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
 }

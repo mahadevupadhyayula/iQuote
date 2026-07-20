@@ -2,7 +2,12 @@ import type { QuoteReadinessBlocker } from "@/lib/rules/readiness-rules";
 
 export type ConfigurationContinuation = {
   canContinue: boolean;
-  blockers: Array<{ code: string; message: string }>;
+  blockers: Array<{
+    code: string;
+    message: string;
+    lineNumber?: number | null;
+    productId?: string | null;
+  }>;
 };
 
 const downstreamBlockers = new Set([
@@ -33,13 +38,13 @@ export const evaluateConfigurationContinuation = (input: {
   const blockers: ConfigurationContinuation["blockers"] = [];
   if (!input.allProductMatchesConfirmed) blockers.push({ code: "product_match_unconfirmed", message: "Confirm the product match for an unmatched line." });
   if (!input.allInventorySelectionsApplied) blockers.push({ code: "inventory_selection_missing", message: "Apply the remaining inventory recommendation." });
-  for (const blocker of input.pricingBlockers) blockers.push({ code: blocker.code, message: blocker.message });
+  for (const blocker of input.pricingBlockers) blockers.push({ code: blocker.code, message: blocker.message, lineNumber: blocker.lineNumber ?? null });
   if (!input.pricingResolved) blockers.push({ code: "pricing_unresolved", message: "Resolve pricing before continuing." });
   if (!input.commercialTotalsExist) blockers.push({ code: "missing_commercial_calculation", message: "Commercial totals must exist before continuing." });
   for (const blocker of input.readinessBlockers) {
     if (downstreamBlockers.has(blocker.code)) continue;
     if (blockers.some((existing) => existing.code === blocker.code && existing.message === blocker.message)) continue;
-    blockers.push({ code: blocker.code, message: friendlyMessage(blocker) });
+    blockers.push({ code: blocker.code, message: friendlyMessage(blocker), productId: blocker.productId ?? null });
   }
   return { canContinue: blockers.length === 0, blockers };
 };

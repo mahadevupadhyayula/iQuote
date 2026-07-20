@@ -169,6 +169,56 @@ describe("quote workspace query service", () => {
     expect(view?.configuration).toMatchObject({ allInventorySelectionsApplied: true, allProductMatchesConfirmed: false, allInventoryConfirmed: false, pricingStatus: "pending_product_confirmation" });
   });
 
+  it("uses persisted applied price metadata and selected inventory for configuration continuation", async () => {
+    const configuredQuote = {
+      ...quote,
+      status: "draft" as const,
+      sla_due_at: null,
+      metadata: { margin_floor_bps: 3000 },
+      items: [{
+        ...quote.items[0],
+        metadata: {
+          ...quote.items[0].metadata,
+          product_match: { method: "sku", confidence: 1, ambiguous: false, product_id: productId },
+          product_confirmation: { confirmed: true, product_id: productId, confirmed_at: timestamp },
+          product_confirmed: true,
+          inventory_decision: { status: "stale_inventory", blocked: true, productId, reason: "Original recommendation expired." },
+          selected_inventory_decision: { status: "available", blocked: false, productId, fulfillment: [{ productId, locationCode: "MAIN", quantity: 2, availableQuantity: 10 }] },
+          selected_fulfillment: [{ productId, locationCode: "MAIN", quantity: 2, availableQuantity: 10 }],
+          inventory_confirmed_at: timestamp,
+          unit_cost: 275,
+          price_application: {
+            product_id: productId,
+            price_id: "66666666-6666-4666-8666-666666666666",
+            price_type: "list",
+            currency_code: "USD",
+            effective_from: "2026-01-01",
+            effective_to: null,
+            source_name: "ERP",
+            source_version: "2026.07",
+          },
+          pricing_resolved: true,
+          pricing_blocker: null,
+        },
+      }],
+    };
+    const configuredRepositories = {
+      ...repositories,
+      quotes: { findById: vi.fn(async () => configuredQuote) },
+      prices: { listCurrentPrices: vi.fn(async () => []) },
+      approvals: { listByQuote: vi.fn(async () => []) },
+    };
+
+    const view = await createQuoteWorkspaceQueryService(configuredRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
+
+    expect(configuredRepositories.prices.listCurrentPrices).not.toHaveBeenCalled();
+    expect(view?.configuration.canContinue).toBe(true);
+    expect(view?.configuration.blockers.map((blocker) => blocker.code)).not.toContain("missing_price_source");
+    expect(view?.configuration.blockers.map((blocker) => blocker.code)).not.toContain("missing_unit_cost");
+    expect(view?.readiness.blockers.map((blocker) => blocker.code)).not.toContain("stale_inventory");
+    expect(view?.lines[0]).toMatchObject({ priceSource: "ERP", priceSourceVersion: "2026.07", unitCost: 275 });
+  });
+
   it("imports quote configuration completion from the canonical rules module", () => {
     const source = readFileSync("lib/services/quote-workspace-query-service.ts", "utf8");
 

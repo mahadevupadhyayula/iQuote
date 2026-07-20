@@ -177,7 +177,7 @@ export type InternalQuoteWorkspaceViewModel = Omit<
     pricingResolved: boolean;
     pricingBlockers: Array<PricingBlocker>;
     canContinue: boolean;
-    blockers: Array<{ code: string; message: string }>;
+    blockers: Array<{ code: string; message: string; lineNumber?: number | null; productId?: string | null }>;
   };
   requirementsSummary: {
     requestedDiscountPercent: number | null;
@@ -221,6 +221,38 @@ const metadataStringArray = (value: unknown): string[] =>
     : [];
 const metadataArray = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : [];
+
+const appliedReadinessPrices = (quote: QuoteWithItems) =>
+  quote.items.flatMap((item) => {
+    if (!item.product_id) return [];
+
+    const application = metadataObject(item.metadata.price_application);
+    const effectiveFrom = metadataString(application, "effective_from");
+    const sourceName = metadataString(application, "source_name");
+    const sourceVersion = metadataString(application, "source_version");
+    const currencyCode =
+      metadataString(application, "currency_code") ?? quote.currency_code;
+    const unitCost =
+      typeof item.metadata.unit_cost === "number" &&
+      Number.isFinite(item.metadata.unit_cost)
+        ? item.metadata.unit_cost
+        : null;
+
+    if (!effectiveFrom) return [];
+
+    return [
+      {
+        productId: item.product_id,
+        unitPrice: item.unit_price,
+        unitCost,
+        currencyCode,
+        sourceName,
+        sourceVersion,
+        effectiveFrom,
+        effectiveTo: metadataString(application, "effective_to") ?? null,
+      },
+    ];
+  });
 const reviewMetadata = (
   metadata: Record<string, unknown>,
 ): InternalQuoteWorkspaceViewModel["reviewMetadata"] => {
@@ -404,14 +436,14 @@ export const createQuoteWorkspaceQueryService = (
           .filter((id): id is string => Boolean(id)),
       ),
     ];
-    const [customer, products, prices, approvals, workflowEvents] =
-      await Promise.all([
-        repositories.customers.findById(quote.customer_id),
-        Promise.all(productIds.map((id) => repositories.products.findById(id))),
-        repositories.prices.listCurrentPrices(productIds, quote.currency_code),
-        repositories.approvals.listByQuote(quote.id),
-        repositories.workflowEvents.listByQuote(quote.id),
-      ]);
+    const customer = await repositories.customers.findById(quote.customer_id);
+    const products = await Promise.all(
+      productIds.map((id) => repositories.products.findById(id)),
+    );
+    const [approvals, workflowEvents] = await Promise.all([
+      repositories.approvals.listByQuote(quote.id),
+      repositories.workflowEvents.listByQuote(quote.id),
+    ]);
 
     const calculated = calculateQuote(
       quote.items.map((item) => ({
@@ -448,15 +480,13 @@ export const createQuoteWorkspaceQueryService = (
         products: products.filter(
           (product): product is NonNullable<typeof product> => Boolean(product),
         ),
-        prices: prices.map((price) => ({
-          productId: price.product_id,
-          unitPrice: price.unit_price,
-          currencyCode: price.currency_code,
-          effectiveFrom: price.effective_from,
-          effectiveTo: price.effective_to,
-        })),
+        prices: appliedReadinessPrices(quote),
         inventoryDecisions: quote.items
-          .map((item) => item.metadata.inventory_decision)
+          .map(
+            (item) =>
+              item.metadata.selected_inventory_decision ??
+              item.metadata.inventory_decision,
+          )
           .filter(Boolean) as never,
         marginPolicy,
         approvals: approvals.map((approval) => ({
@@ -502,7 +532,25 @@ export const createQuoteWorkspaceQueryService = (
               ? "pending_product_confirmation"
               : "not_started";
 
-    const configurationContinuation = evaluateConfigurationContinuation({ readinessBlockers: readiness.blockers, pricingResolved, pricingBlockers, allProductMatchesConfirmed, allInventorySelectionsApplied, commercialTotalsExist: quote.items.length > 0 && calculated.subtotalCents >= 0 });
+    const commercialTotalsExist =
+      quote.items.length > 0 &&
+      pricingResolved &&
+      Number.isFinite(calculated.subtotalCents) &&
+      Number.isFinite(calculated.netTotalCents) &&
+      calculated.subtotalCents > 0;
+    const configurationContinuation = evaluateConfigurationContinuation({ readinessBlockers: readiness.blockers, pricingResolved, pricingBlockers, allProductMatchesConfirmed, allInventorySelectionsApplied, commercialTotalsExist });
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[quote-configuration]", {
+        quoteId: quote.id,
+        allProductMatchesConfirmed,
+        allInventorySelectionsApplied,
+        pricingResolved,
+        pricingBlockers,
+        readinessBlockers: readiness.blockers,
+        continuationBlockers: configurationContinuation.blockers,
+      });
+    }
 
     return {
       ...customerView,

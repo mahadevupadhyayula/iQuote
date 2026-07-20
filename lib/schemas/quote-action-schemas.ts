@@ -5,6 +5,8 @@ import { currencyCodeSchema, dateSchema, jsonObjectSchema, uuidSchema } from "./
 
 const optionalUuidSchema = uuidSchema.optional().nullable();
 const actionLineSchema = z.object({
+  id: uuidSchema.optional(),
+  line_number: z.coerce.number().int().positive().optional(),
   product_id: uuidSchema.optional().nullable(),
   sku: z.string().trim().min(1),
   description: z.string().trim().min(1),
