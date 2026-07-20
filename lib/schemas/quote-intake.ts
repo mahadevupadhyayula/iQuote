@@ -1,9 +1,11 @@
 import { z } from "zod";
 
 export const quoteIntakeSeedIds = [
-  "atlas-install-ambiguity",
-  "northwind-filter-kits",
-  "contoso-budgetary-quote",
+  "standard-quote-ready-for-review",
+  "large-discount-approval-required",
+  "ambiguous-requirements-clarification-needed",
+  "insufficient-stock-fulfillment-review",
+  "unknown-sku-product-review",
 ] as const;
 
 export type QuoteIntakeSeedId = (typeof quoteIntakeSeedIds)[number];

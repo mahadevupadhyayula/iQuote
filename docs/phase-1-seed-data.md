@@ -9,10 +9,10 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Data type | Seeded rows |
 | --- | --- |
 | Customers | `DEMO-CUST-ATLAS` / Atlas Manufacturing; `DEMO-CUST-NORTHSTAR` / Northstar Mining |
-| Products | `AX-200`, `HX-500`, `HX-500R`, `INST-STD` |
-| Prices | `AX-200` = `128000` cents; `HX-500` = `342500` cents; `HX-500R` = `319500` cents; `INST-STD` = `65000` cents |
-| Inventory | `AX-200`: `CHI-01` has `10` available, `DAL-02` has `8` available; `HX-500`: `DEN-01` has `2` available, `SEA-01` has `4` available; `HX-500R`: `DEN-01` has `5` available, `SEA-01` has `5` available |
-| Discount policies | Atlas volume discount: `800` bps, max `1200` bps, minimum quantity `10`; Northstar replacement incentive: `25000` cents amount off for `HX-500` to `HX-500R`; Standard installation bundle: `1500` bps |
+| Products | `AX-200`, `AX-200-FKIT`, `HX-500`, `HX-500R`, `INST-STD` |
+| Prices | `AX-200` = `128000` cents; `AX-200-FKIT` = `14500` cents; `HX-500` = `342500` cents; `HX-500R` = `319500` cents; `INST-STD` = `65000` cents |
+| Inventory | `AX-200`: `CHI-01` has `10` available, `DAL-02` has `8` available; `AX-200-FKIT`: `DAL-02` has `18` available; `HX-500`: `DEN-01` has `2` available, `SEA-01` has `4` available; `HX-500R`: `DEN-01` has `5` available, `SEA-01` has `5` available |
+| Discount policies | Atlas volume discount: automatic threshold `800` bps, max approval demo range `1500` bps, minimum quantity `1`; Northstar replacement incentive: `25000` cents amount off for `HX-500` to `HX-500R`; Standard installation bundle: `1500` bps |
 
 ## Scenario A — straight-through Atlas Manufacturing quote
 
@@ -26,12 +26,12 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Unit cost | `82000` cents |
 | Quantity | `4` |
 | Line subtotal | `512000` cents (`128000 * 4`) |
-| Discount policy applied | Requested and approved discount `800` bps; straight-through approval. Seeded Atlas volume discount is `800` bps but has minimum quantity `10`, so this scenario records the explicit requested discount from the contract rather than an automatic seed policy entitlement. |
-| Discount amount | `40960` cents (`512000 * 800 / 10000`) |
-| Net line total | `471040` cents (`512000 - 40960`) |
+| Discount policy applied | Requested and approved discount `0` bps; straight-through approval. The customer explicitly requests no additional discount. |
+| Discount amount | `0` cents |
+| Net line total | `512000` cents |
 | Extended cost | `328000` cents (`82000 * 4`) |
-| Gross profit | `143040` cents (`471040 - 328000`) |
-| Gross margin percentage or basis points | `3037` bps (`round(143040 * 10000 / 471040)`) |
+| Gross profit | `184000` cents (`512000 - 328000`) |
+| Gross margin percentage or basis points | `3594` bps (`round(184000 * 10000 / 512000)`) |
 | Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total available `18` |
 | Approval result | `straight_through`; no required approval role |
 | Expected persisted quote status | `sent` after status path `draft` → `approved` → `sent` |
@@ -49,14 +49,14 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Unit cost | `82000` cents |
 | Quantity | `4` |
 | Line subtotal | `512000` cents (`128000 * 4`) |
-| Discount policy applied | Requested discount `1200` bps; product-manager approval required; modified approved discount `1000` bps. The seeded Atlas volume policy has max `1200` bps and minimum quantity `10`, while this scenario quantity is `4`, so the exception is handled through approval. |
-| Discount amount | `51200` cents (`512000 * 1000 / 10000`) |
-| Net line total | `460800` cents (`512000 - 51200`) |
+| Discount policy applied | Requested discount `1200` bps; product-manager approval required because it is above the seeded `800` bps automatic threshold but within the `1500` bps demo range. |
+| Discount amount | `61440` cents (`512000 * 1200 / 10000`) |
+| Net line total | `450560` cents (`512000 - 61440`) |
 | Extended cost | `328000` cents (`82000 * 4`) |
-| Gross profit | `132800` cents (`460800 - 328000`) |
-| Gross margin percentage or basis points | `2882` bps (`round(132800 * 10000 / 460800)`) |
+| Gross profit | `122560` cents (`450560 - 328000`) |
+| Gross margin percentage or basis points | `2720` bps (`round(122560 * 10000 / 450560)`) |
 | Inventory source warehouse allocation | `CHI-01`: quantity `4` from `10` available; `single_warehouse`; total available `18` |
-| Approval result | Product manager approval required and approved with modified discount `1000` bps |
+| Approval result | Product manager approval required for requested `1200` bps discount |
 | Expected persisted quote status | `sent` after status path `draft` → `pending_approval` → `approved` → `sent` |
 | Expected workflow event | `submit_for_product_manager_approval`, then `approve_modified_discount_1000_bps` |
 
@@ -82,3 +82,32 @@ Money is expressed as integer cents. Discounts and gross margin are expressed as
 | Approval result | `straight_through` after inventory resolution; no required approval role |
 | Expected persisted quote status | `sent` after status path `draft` → `needs_information` → `configuring` → `approved` → `sent` |
 | Expected workflow event | `straight_through_after_inventory_resolution` |
+
+
+## Scenario D — Insufficient stock — fulfillment review
+
+| Field | Expected value |
+| --- | --- |
+| Customer | Atlas Manufacturing (`10000000-0000-4000-8000-000000000001`, `DEMO-CUST-ATLAS`) |
+| Requested products and quantities | `AX-200 compressors`, quantity `19` |
+| Unit price | `128000` cents |
+| Quantity | `19` |
+| Line subtotal | `2432000` cents |
+| Discount amount | `0` cents |
+| Gross profit | `874000` cents |
+| Inventory result | `backordered`; blocked; total available `18`; no fulfillment allocation |
+| Expected persisted quote status | `reviewing` for fulfillment review |
+
+## Scenario E — Unknown SKU — product review
+
+| Field | Expected value |
+| --- | --- |
+| Customer | Atlas Manufacturing (`10000000-0000-4000-8000-000000000001`, `DEMO-CUST-ATLAS`) |
+| Requested products and quantities | `ZX-999-UNKNOWN`, quantity `3` |
+| Product match result | No deterministic match; no silent substitution |
+| Unit price | `0` cents |
+| Quantity | `3` |
+| Line subtotal | `0` cents |
+| Discount amount | `0` cents |
+| Gross profit | `0` cents |
+| Expected persisted quote status | `reviewing` for product review |
