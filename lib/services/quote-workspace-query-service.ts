@@ -1,6 +1,7 @@
 import "server-only";
 
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
+import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
 import { evaluateQuoteReadiness, type QuoteReadinessEvaluation } from "@/lib/rules/readiness-rules";
 import type { ApprovalsRepository } from "@/lib/repositories/approvals";
 import type { CustomersRepository } from "@/lib/repositories/customers";

@@ -16,7 +16,8 @@ import { createExtractionService } from "@/lib/services/extraction-service";
 import { createProductMatchingService } from "@/lib/services/product-matching-service";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 import { createQuoteCommercialConfigurationService } from "@/lib/services/quote-commercial-configuration-service";
-import { allInventoryConfirmed, createQuotePricingResolutionService, quoteConfigurationCompletion } from "@/lib/services/quote-pricing-resolution-service";
+import { allInventoryConfirmed, quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
+import { createQuotePricingResolutionService } from "@/lib/services/quote-pricing-resolution-service";
 import {
   applyRepCorrectionsActionSchema,
   continueQuoteConfigurationActionSchema,
