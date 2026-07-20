@@ -10,7 +10,7 @@ import type { ProductsRepository } from "@/lib/repositories/products";
 import type { QuoteWithItems, QuotesRepository } from "@/lib/repositories/quotes";
 import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-events";
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
-import { quoteConfigurationCompletion, type PricingBlocker } from "@/lib/services/quote-pricing-resolution-service";
+import type { PricingBlocker } from "@/lib/services/quote-pricing-resolution-service";
 import type { ApprovalRecord, CustomerRecord, WorkflowEventRecord } from "@/lib/schemas/shared-records";
 import type { BasisPoints, Cents } from "@/lib/utils/money";
 

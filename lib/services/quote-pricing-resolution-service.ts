@@ -1,7 +1,6 @@
 import "server-only";
 
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
-import { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import type { CustomersRepository } from "@/lib/repositories/customers";
 import type { PricesRepository } from "@/lib/repositories/prices";
