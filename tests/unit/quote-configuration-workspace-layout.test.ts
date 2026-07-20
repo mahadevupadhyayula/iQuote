@@ -59,9 +59,10 @@ describe("quote configuration workspace presentation", () => {
     expect(actions).toContain("✓ Applied");
     expect(actions).toContain("router.refresh()");
     expect(actions).toContain("quote.configuration.canContinue");
-    expect(actions).toContain(
-      "Apply all inventory recommendations before continuing.",
-    );
-    expect(actions).toContain("Resolve pricing errors before continuing.");
+    expect(actions).toContain("quote.configuration.blockers.map");
+    expect(actions).toContain("Complete the remaining quote configuration before continuing.");
+    expect(actions).toContain("Configuration complete. Continue will evaluate approval requirements.");
+    expect(actions).not.toContain("Apply all inventory recommendations before continuing.");
+    expect(actions).not.toContain("Resolve pricing errors before continuing.");
   });
 });

@@ -163,26 +163,87 @@ const lineTotals = (
   };
 };
 
+
+const removeKeys = (metadata: Record<string, unknown>, keys: string[]) => {
+  const next = { ...metadata };
+  for (const key of keys) delete next[key];
+  return next;
+};
+
+const metadataForSubmittedLine = (
+  existing: QuoteItemRecord | undefined,
+  submitted: Record<string, unknown> | undefined,
+  changes: { productChanged: boolean; quantityChanged: boolean },
+) => {
+  const merged = { ...(existing?.metadata ?? {}), ...(submitted ?? {}) };
+  if (changes.productChanged) {
+    return removeKeys(merged, [
+      "product_match",
+      "product_confirmation",
+      "product_confirmed",
+      "rep_confirmed_product",
+      "selected_inventory_decision",
+      "selected_fulfillment",
+      "inventory_confirmed_at",
+      "inventory_decision",
+      "price_application",
+      "pricing_resolved",
+      "pricing_blocker",
+      "unit_cost",
+    ]);
+  }
+  if (changes.quantityChanged) {
+    return removeKeys(merged, [
+      "selected_inventory_decision",
+      "selected_fulfillment",
+      "inventory_confirmed_at",
+      "inventory_decision",
+    ]);
+  }
+  return merged;
+};
+
 const toQuoteItems = (
   lines: NonNullable<ApplyRepCorrectionsActionInput["lines"]> = [],
-): Omit<QuoteItemCreateInput, "quote_id">[] =>
-  lines.map((line, index) => {
-    const subtotal = line.quantity * (line.unit_price ?? 0);
-    const discountBps = line.discount_bps ?? 0;
+  existingItems: QuoteItemRecord[] = [],
+): Omit<QuoteItemCreateInput, "quote_id">[] => {
+  const byId = new Map(existingItems.map((item) => [item.id, item]));
+  const byLineNumber = new Map(existingItems.map((item) => [item.line_number, item]));
+
+  return lines.map((line, index) => {
+    const existing =
+      (line.id ? byId.get(line.id) : undefined) ??
+      (line.line_number ? byLineNumber.get(line.line_number) : undefined) ??
+      byLineNumber.get(index + 1);
+    const unitPrice = line.unit_price ?? existing?.unit_price ?? 0;
+    const discountBps = line.discount_bps ?? existing?.discount_bps ?? 0;
+    const quantity = line.quantity ?? existing?.quantity ?? 1;
+    const subtotal = quantity * unitPrice;
     const discount = (subtotal * discountBps) / 10_000;
+    const productChanged = Boolean(
+      existing &&
+        ((line.product_id !== undefined && line.product_id !== existing.product_id) ||
+          line.sku !== existing.sku ||
+          line.description !== existing.description),
+    );
+    const quantityChanged = Boolean(existing && line.quantity !== existing.quantity);
     return {
-      product_id: line.product_id ?? null,
-      line_number: index + 1,
-      sku: line.sku,
-      description: line.description,
-      quantity: line.quantity,
-      unit_price: money(line.unit_price ?? 0),
+      product_id: line.product_id ?? existing?.product_id ?? null,
+      line_number: line.line_number ?? existing?.line_number ?? index + 1,
+      sku: line.sku ?? existing?.sku ?? "UNMATCHED",
+      description: line.description ?? existing?.description ?? "Unmatched item",
+      quantity,
+      unit_price: money(unitPrice),
       discount_bps: discountBps,
       discount_amount: money(discount),
       line_total_amount: money(subtotal - discount),
-      metadata: line.metadata ?? {},
+      metadata: metadataForSubmittedLine(existing, line.metadata, {
+        productChanged,
+        quantityChanged,
+      }),
     };
   });
+};
 
 const refreshQuoteAmounts = async (
   quoteId: string,
@@ -309,7 +370,7 @@ const persistRepCorrections = async (
   if (data.lines)
     await repositories.quotes.replaceItems(
       data.quote_id,
-      toQuoteItems(data.lines),
+      toQuoteItems(data.lines, before.items),
     );
   const latest = await repositories.quotes.findById(data.quote_id);
   if (!latest)
@@ -683,7 +744,12 @@ export async function continueQuoteConfiguration(
     pricingBlockers,
     allProductMatchesConfirmed: completion.allProductMatchesConfirmed,
     allInventorySelectionsApplied: completion.allInventorySelectionsApplied,
-    commercialTotalsExist: result.quote.subtotal_amount >= 0 && result.quote.total_amount >= 0,
+    commercialTotalsExist:
+      result.items.length > 0 &&
+      result.items.every((item) => item.metadata.pricing_resolved === true) &&
+      Number.isFinite(result.calculation.subtotalCents) &&
+      Number.isFinite(result.calculation.netTotalCents) &&
+      result.calculation.subtotalCents > 0,
   });
   const blockers = continuation.blockers;
   if (blockers.length > 0) {
