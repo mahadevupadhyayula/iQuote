@@ -183,6 +183,11 @@ describe("demo reset seed payloads", () => {
     expect(sqlSeed).toContain("matching spare filters");
     expect(sqlSeed).toContain("'40000000-0000-4000-8000-000000000211'");
     expect(sqlSeed).toContain("'50000000-0000-4000-8000-000000000211'");
+    expect(sqlSeed).toContain("'AX-200-FKIT', 'AX-200 Compatible Filter Kit'");
+    expect(sqlSeed).toContain("'USD', 145.00");
+    expect(sqlSeed).toContain('"compatible_with":"AX-200"');
     expect(sqlSeed).toContain('"approval_required_above_bps":800');
+    expect(sqlSeed).toContain("'INST-STD'");
+    expect(sqlSeed).not.toContain("'INST-PKG'");
   });
 });
