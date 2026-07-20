@@ -22,6 +22,7 @@ type PublicEnums = {
     | "draft"
     | "extracting"
     | "needs_information"
+    | "reviewing"
     | "configuring"
     | "pending_approval"
     | "approved"

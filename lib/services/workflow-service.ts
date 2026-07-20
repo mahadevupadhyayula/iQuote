@@ -18,6 +18,7 @@ export const workflowTransitions = {
   draft: {
     extracting: { eventType: "extraction_started" },
     needs_information: { eventType: "updated" },
+    reviewing: { eventType: "updated" },
     pending_approval: {
       eventType: "submitted_for_approval",
       timestamps: ["submitted_at"],
@@ -28,12 +29,17 @@ export const workflowTransitions = {
     cancelled: { eventType: "cancelled" },
   },
   extracting: {
+    reviewing: { eventType: (payload) => (payload.action === "quote_extraction_failed" ? "extraction_failed" : "extraction_completed") },
     needs_information: { eventType: (payload) => (payload.action === "quote_extraction_failed" ? "extraction_failed" : "extraction_completed") },
-    configuring: { eventType: "extraction_completed" },
     cancelled: { eventType: "cancelled" },
   },
   needs_information: {
+    reviewing: { eventType: "updated" },
     draft: { eventType: "updated" },
+    configuring: { eventType: "updated" },
+    cancelled: { eventType: "cancelled" },
+  },
+  reviewing: {
     configuring: { eventType: "updated" },
     cancelled: { eventType: "cancelled" },
   },
