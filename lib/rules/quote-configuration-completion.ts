@@ -43,6 +43,7 @@ export const quoteConfigurationCompletion = (items: QuoteConfigurationLine[]): Q
   const selectedLineNumbers = selected.map((item) => item.line_number);
   const unavailableLineNumbers = unavailable.map((item) => item.line_number);
   const unresolvedLineNumbers = unresolved.map((item) => item.line_number);
+  const selectedInventoryApplied = selected.every((item) => Boolean(item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string"));
   const allSelectedProductsConfirmed = selected.every(hasConfirmedProductMatch);
   const allSelectedInventoryConfirmed = selected.every(isQuotableLine);
   const allSelectedPricingResolved = selected.every((item) => item.metadata.pricing_resolved === true && !item.metadata.pricing_blocker);
@@ -53,7 +54,7 @@ export const quoteConfigurationCompletion = (items: QuoteConfigurationLine[]): Q
     requestedLineCount: items.length, selectedLineCount: selected.length, unavailableLineCount: unavailable.length, unresolvedLineCount: unresolved.length, quotableLineCount: quotable.length,
     allLinesResolved, hasAtLeastOneQuotableLine, allSelectedProductsConfirmed, allSelectedInventoryConfirmed, allSelectedPricingResolved,
     selectedLineNumbers, unavailableLineNumbers, unresolvedLineNumbers, canPriceSelectedLines: quotable.length > 0, canContinue,
-    inventoryRequiredCount: selected.length, inventoryResolvedCount: quotable.length, allInventorySelectionsApplied: allSelectedInventoryConfirmed, allProductMatchesConfirmed: allSelectedProductsConfirmed, allInventoryConfirmed: allSelectedInventoryConfirmed && allSelectedProductsConfirmed,
+    inventoryRequiredCount: selected.length, inventoryResolvedCount: selected.filter((item) => Boolean(item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string")).length, allInventorySelectionsApplied: selectedInventoryApplied, allProductMatchesConfirmed: allSelectedProductsConfirmed, allInventoryConfirmed: allSelectedInventoryConfirmed && allSelectedProductsConfirmed,
   };
 };
 

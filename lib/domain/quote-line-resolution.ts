@@ -56,7 +56,7 @@ export const getQuoteLineResolution = (item: QuoteLineResolutionItem): QuoteLine
     };
   }
   const productState = normalizeProductMatchState(item.metadata, item.product_id);
-  if (productState.productId && productState.confirmed && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment)) {
+  if (productState.productId && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment)) {
     return {
       status: "selected",
       source: string(object(item.metadata.product_confirmation).confirmation_source) === "catalogue_selection" ? "catalogue_selection" : "recommended",

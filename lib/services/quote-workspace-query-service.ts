@@ -437,7 +437,7 @@ export const createQuoteWorkspaceQueryService = (
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) return null;
     return toCustomer(
-      { ...quote, items: quote.items.filter(isQuotableLine) },
+      { ...quote, items: quote.items.filter((item) => !isUnavailableLine(item)) },
       await repositories.customers.findById(quote.customer_id),
     );
   },
@@ -464,7 +464,7 @@ export const createQuoteWorkspaceQueryService = (
       repositories.workflowEvents.listByQuote(quote.id),
     ]);
 
-    const calculationItems = quote.items.filter(isQuotableLine);
+    const calculationItems = quote.items.filter((item) => isQuotableLine(item) || (!item.metadata.line_resolution && !isUnavailableLine(item) && Boolean(item.product_id)));
     const calculated = calculateQuote(
       calculationItems.map((item) => ({
         lineId: item.id,
