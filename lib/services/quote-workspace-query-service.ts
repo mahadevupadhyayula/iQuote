@@ -31,7 +31,7 @@ export type QuoteWorkspaceQueryRepositories = {
   approvals: Pick<ApprovalsRepository, "listByQuote">;
   customers: Pick<CustomersRepository, "findById">;
   prices: Pick<PricesRepository, "listCurrentPrices">;
-  products: Pick<ProductsRepository, "findById" | "listActive">;
+  products: Pick<ProductsRepository, "findById"> & { listActive?: ProductsRepository["listActive"] };
   quotes: Pick<QuotesRepository, "findById">;
   workflowEvents: Pick<WorkflowEventsRepository, "listByQuote">;
 };
@@ -524,7 +524,7 @@ export const createQuoteWorkspaceQueryService = (
     );
     const customerView = toCustomer({ ...quote, items: calculationItems }, customer);
     const allCustomerLines = toCustomer(quote, customer).lines;
-    const activeCatalogueProducts = await repositories.products.listActive({ limit: 100 });
+    const activeCatalogueProducts = repositories.products.listActive ? await repositories.products.listActive({ limit: 100 }) : [];
     const productById = new Map(products.filter((product): product is NonNullable<typeof product> => Boolean(product)).map((product) => [product.id, product]));
     const requirements = metadataObject(quote.metadata.requirements);
     const commercialRequirements = metadataObject(requirements.commercial);

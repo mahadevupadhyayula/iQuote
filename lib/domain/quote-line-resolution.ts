@@ -1,3 +1,4 @@
+import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import type { QuoteItemRecord } from "@/lib/schemas/shared-records";
 
 export type QuoteLineResolutionStatus = "unresolved" | "selected" | "unavailable";
@@ -54,12 +55,13 @@ export const getQuoteLineResolution = (item: QuoteLineResolutionItem): QuoteLine
       reason: string(persisted.reason),
     };
   }
-  if (item.product_id && item.metadata.product_confirmed === true && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment)) {
+  const productState = normalizeProductMatchState(item.metadata, item.product_id);
+  if (productState.productId && productState.confirmed && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment)) {
     return {
       status: "selected",
       source: string(object(item.metadata.product_confirmation).confirmation_source) === "catalogue_selection" ? "catalogue_selection" : "recommended",
       requestedLineNumber: item.line_number,
-      selectedProductId: item.product_id,
+      selectedProductId: productState.productId,
       resolvedAt: string(item.metadata.inventory_confirmed_at),
       resolvedBy: string(object(item.metadata.product_confirmation).confirmed_by),
       reason: null,
@@ -71,6 +73,8 @@ export const getQuoteLineResolution = (item: QuoteLineResolutionItem): QuoteLine
 export const isUnavailableLine = (item: QuoteLineResolutionItem) => getQuoteLineResolution(item).status === "unavailable";
 export const isUnresolvedLine = (item: QuoteLineResolutionItem) => getQuoteLineResolution(item).status === "unresolved";
 export const isSelectedLine = (item: QuoteLineResolutionItem) => getQuoteLineResolution(item).status === "selected";
-export const hasConfirmedSelectedInventory = (item: QuoteLineResolutionItem) =>
-  isSelectedLine(item) && Boolean(item.product_id && item.metadata.product_confirmed === true && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string" && !object(item.metadata.selected_inventory_decision).blocked && !item.metadata.inventory_blocker);
+export const hasConfirmedSelectedInventory = (item: QuoteLineResolutionItem) => {
+  const productState = normalizeProductMatchState(item.metadata, item.product_id);
+  return isSelectedLine(item) && Boolean(productState.productId && productState.confirmed && item.metadata.selected_inventory_decision && Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string" && !object(item.metadata.selected_inventory_decision).blocked && !item.metadata.inventory_blocker);
+};
 export const isQuotableLine = (item: QuoteLineResolutionItem) => hasConfirmedSelectedInventory(item);
