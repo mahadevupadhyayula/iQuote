@@ -5,7 +5,8 @@ import { getQuoteQueueActionLabel, getQuoteStageRouteDecision } from "@/lib/rule
 describe("quote stage routing", () => {
   it.each([
     ["draft", "/quotes/quote-1/intake"],
-    ["needs_information", "/quotes/quote-1/needs-information"],
+    ["needs_information", "/quotes/quote-1/review"],
+    ["reviewing", "/quotes/quote-1/review"],
     ["configuring", "/quotes/quote-1/configure"],
     ["pending_approval", "/quotes/quote-1/approval-pending"],
     ["approved", "/quotes/quote-1/generate"],
@@ -27,7 +28,8 @@ describe("quote stage routing", () => {
 
 describe("quote queue labels", () => {
   it.each([
-    ["needs_information", "Complete information"],
+    ["needs_information", "Review information"],
+    ["reviewing", "Review information"],
     ["configuring", "Configure quote"],
     ["pending_approval", "View approval status"],
     ["approved", "Generate quote"],

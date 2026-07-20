@@ -26,8 +26,9 @@ export interface WorkflowStepperStep {
 export const quoteStatusToWorkflowStep: Record<QuoteStatus, WorkflowStepId> = {
   draft: 'intake',
   extracting: 'intake',
-  needs_information: 'resolve-exceptions',
-  configuring: 'generate-quote',
+  needs_information: 'review',
+  reviewing: 'review',
+  configuring: 'resolve-exceptions',
   pending_approval: 'review',
   approved: 'generate-quote',
   sent: 'generate-quote',

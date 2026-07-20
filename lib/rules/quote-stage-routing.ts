@@ -16,7 +16,8 @@ export const getQuoteStageRouteDecision = (
     case "extracting":
       return { kind: "render", state: "extracting" };
     case "needs_information":
-      return { kind: "redirect", href: `/quotes/${quoteId}/needs-information` };
+    case "reviewing":
+      return { kind: "redirect", href: `/quotes/${quoteId}/review` };
     case "configuring":
       return { kind: "redirect", href: `/quotes/${quoteId}/configure` };
     case "pending_approval":
@@ -38,7 +39,8 @@ export const getQuoteStageRouteDecision = (
 export const getQuoteQueueActionLabel = (status: QuoteStageStatus) => {
   switch (status) {
     case "needs_information":
-      return "Complete information";
+    case "reviewing":
+      return "Review information";
     case "configuring":
     case "rejected":
     case "expired":

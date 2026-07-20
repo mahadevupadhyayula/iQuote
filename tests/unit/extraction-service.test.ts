@@ -75,7 +75,7 @@ describe("createExtractionService failure fallback", () => {
     expect(harness.workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({
       event_type: "extraction_failed",
       from_status: "extracting",
-      to_status: "needs_information",
+      to_status: "reviewing",
       payload: { action: "quote_extraction_failed", error_category: "malformed_response", error_summary: expect.any(String), manual_entry_enabled: true },
     }));
   });
@@ -86,7 +86,7 @@ describe("createExtractionService failure fallback", () => {
     const result = await harness.service.extractAndPersist({ quoteId, sourceText: "Need scanners" });
 
     expect(result.failure?.category).toBe("timeout");
-    expect(harness.storedQuote.status).toBe("needs_information");
+    expect(harness.storedQuote.status).toBe("reviewing");
     expect(JSON.stringify(harness.storedQuote.metadata)).not.toContain("sk-live-secret");
   });
 

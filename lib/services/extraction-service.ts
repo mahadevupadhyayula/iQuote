@@ -21,9 +21,8 @@ export type ExtractQuoteInput = {
   actorId?: string | null;
 };
 
-const configuringStatus: QuoteStatus = "configuring";
 const extractingStatus: QuoteStatus = "extracting";
-const needsInformationStatus: QuoteStatus = "needs_information";
+const reviewingStatus: QuoteStatus = "reviewing";
 
 const buildClarificationQuestions = (missingFields: string[]) =>
   missingFields.map((field) => ({ field, question: `Please provide ${field.replace(/[_.[\]]+/g, " ").trim()}.` }));
@@ -113,13 +112,11 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
         },
       });
 
-      const needsInformation = extraction.missing_fields.length > 0 || extraction.ambiguities.length > 0 || clarificationQuestions.length > 0;
-      const targetStatus = needsInformation ? needsInformationStatus : configuringStatus;
-      const transitioned = updatedQuote.status === targetStatus
+      const transitioned = updatedQuote.status === reviewingStatus
         ? updatedQuote
         : (await workflowService.transitionQuote({
             quoteId,
-            toStatus: targetStatus,
+            toStatus: reviewingStatus,
             actorId,
             payload: { action: "quote_extraction_completed", missing_fields: extraction.missing_fields, clarification_questions: clarificationQuestions },
           })).quote;
@@ -133,7 +130,7 @@ export const createExtractionService = ({ quotesRepository, workflowEventsReposi
 
       const { quote: updatedQuote } = await workflowService.transitionQuote({
         quoteId,
-        toStatus: needsInformationStatus,
+        toStatus: reviewingStatus,
         actorId,
         payload: { action: "quote_extraction_failed", error_category: failure.category, error_summary: failure.summary, manual_entry_enabled: true },
       });

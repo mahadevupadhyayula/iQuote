@@ -85,7 +85,7 @@ describe("submitQuoteIntake", () => {
   it("returns the saved quote id with manual fallback state when extraction times out", async () => {
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Need rugged scanners for a warehouse rollout." });
 
-    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "needs_information", extractionStatus: "manual_fallback", manualFallback: true, manualFallbackState: { enabled: true, reason: "extraction_failed", category: "timeout" } });
+    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "reviewing", extractionStatus: "manual_fallback", manualFallback: true, manualFallbackState: { enabled: true, reason: "extraction_failed", category: "timeout" } });
     expect(JSON.stringify(result)).not.toContain("sk-secret");
     expect(result).toMatchObject({ slaStartedAt: "2026-07-18T12:00:00.000Z", slaDueAt: "2026-07-18T12:15:00.000Z" });
     expect(state.quote.sla_due_at).toBe("2026-07-18T12:15:00.000Z");
@@ -94,16 +94,16 @@ describe("submitQuoteIntake", () => {
     expect(metadata.manual_entry).toMatchObject({ enabled: true, failure_category: "timeout" });
   });
 
-  it("returns configuring when extraction completes with required information", async () => {
+  it("returns reviewing when extraction completes with required information", async () => {
     state.extractionError = null;
     state.extractionOutput = completeExtraction();
 
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15." });
 
-    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "configuring", extractionStatus: "completed" });
+    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "reviewing", extractionStatus: "completed" });
   });
 
-  it("returns needs_information when extraction reports ambiguous information requiring review", async () => {
+  it("returns reviewing when extraction reports ambiguous information requiring review", async () => {
     state.extractionError = null;
     state.extractionOutput = completeExtraction({
       source_text: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear.",
@@ -115,7 +115,7 @@ describe("submitQuoteIntake", () => {
 
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear." });
 
-    expect(result).toMatchObject({ ok: true, status: "needs_information" });
+    expect(result).toMatchObject({ ok: true, status: "reviewing" });
     expect(result.ok && result.clarificationQuestions).toEqual(expect.arrayContaining([expect.objectContaining({ field: "installation_requirement" })]));
   });
 });

@@ -63,9 +63,10 @@ const buildHarness = (quote: QuoteWithItems, events: Record<string, unknown>[] =
 describe("workflow service", () => {
   it("declares every V1 legal transition with a workflow event type", () => {
     const expectedTransitions: Record<QuoteStatus, Partial<Record<QuoteStatus, string>>> = {
-      draft: { extracting: "extraction_started", needs_information: "updated", pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
-      extracting: { needs_information: "dynamic", configuring: "extraction_completed", cancelled: "cancelled" },
-      needs_information: { draft: "updated", configuring: "updated", cancelled: "cancelled" },
+      draft: { extracting: "extraction_started", needs_information: "updated", reviewing: "updated", pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
+      extracting: { reviewing: "dynamic", needs_information: "dynamic", cancelled: "cancelled" },
+      needs_information: { reviewing: "updated", draft: "updated", configuring: "updated", cancelled: "cancelled" },
+      reviewing: { configuring: "updated", cancelled: "cancelled" },
       configuring: { pending_approval: "submitted_for_approval", approved: "approved", sent: "sent", cancelled: "cancelled" },
       pending_approval: { approved: "approved", rejected: "rejected", cancelled: "cancelled" },
       approved: { sent: "sent", cancelled: "cancelled" },
@@ -119,29 +120,29 @@ describe("workflow service", () => {
     const { service, workflowEventsRepository } = buildHarness(buildQuote("draft"));
 
     await service.transitionQuote({ quoteId, toStatus: "extracting", actorId, payload: { action: "quote_extraction_started" } });
-    const completed = await service.transitionQuote({ quoteId, toStatus: "configuring", actorId, payload: { action: "quote_extraction_completed" } });
+    const completed = await service.transitionQuote({ quoteId, toStatus: "reviewing", actorId, payload: { action: "quote_extraction_completed" } });
 
-    expect(completed.quote.status).toBe("configuring");
+    expect(completed.quote.status).toBe("reviewing");
     expect(workflowEventsRepository.record).toHaveBeenNthCalledWith(1, expect.objectContaining({ event_type: "extraction_started", from_status: "draft", to_status: "extracting" }));
-    expect(workflowEventsRepository.record).toHaveBeenNthCalledWith(2, expect.objectContaining({ event_type: "extraction_completed", from_status: "extracting", to_status: "configuring" }));
+    expect(workflowEventsRepository.record).toHaveBeenNthCalledWith(2, expect.objectContaining({ event_type: "extraction_completed", from_status: "extracting", to_status: "reviewing" }));
   });
 
-  it("records extraction failure when leaving extracting for needs information", async () => {
+  it("records extraction failure when leaving extracting for review", async () => {
     const { service, workflowEventsRepository } = buildHarness(buildQuote("extracting"));
 
-    const result = await service.transitionQuote({ quoteId, toStatus: "needs_information", actorId, payload: { action: "quote_extraction_failed" } });
+    const result = await service.transitionQuote({ quoteId, toStatus: "reviewing", actorId, payload: { action: "quote_extraction_failed" } });
 
-    expect(result.quote.status).toBe("needs_information");
-    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "extraction_failed", from_status: "extracting", to_status: "needs_information" }));
+    expect(result.quote.status).toBe("reviewing");
+    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "extraction_failed", from_status: "extracting", to_status: "reviewing" }));
   });
 
-  it("allows rep clarification to move needs information quotes into configuring", async () => {
-    const { service, workflowEventsRepository } = buildHarness(buildQuote("needs_information"));
+  it("allows reviewed quotes to move into configuring", async () => {
+    const { service, workflowEventsRepository } = buildHarness(buildQuote("reviewing"));
 
     const result = await service.transitionQuote({ quoteId, toStatus: "configuring", actorId, payload: { action: "apply_rep_corrections" } });
 
     expect(result.quote.status).toBe("configuring");
-    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "updated", from_status: "needs_information", to_status: "configuring" }));
+    expect(workflowEventsRepository.record).toHaveBeenCalledWith(expect.objectContaining({ event_type: "updated", from_status: "reviewing", to_status: "configuring" }));
   });
 
   it("keeps configuration to approval guarded by quote readiness rules", async () => {

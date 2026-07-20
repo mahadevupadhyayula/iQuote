@@ -140,11 +140,9 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
 
   useEffect(() => {
     if (!result?.ok) return;
-    if (result.status === "needs_information") {
-      router.push(`/quotes/${result.quoteId}/needs-information`);
-      return;
+    if (result.status === "needs_information" || result.status === "reviewing" || result.status === "configuring") {
+      router.push(`/quotes/${result.quoteId}/review`);
     }
-    if (result.status === "configuring") router.push(`/quotes/${result.quoteId}/configure`);
   }, [result, router]);
 
   const onSubmit: SubmitHandler<QuoteIntakeInput> = (values) => {
