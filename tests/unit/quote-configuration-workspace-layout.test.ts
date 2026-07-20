@@ -35,6 +35,8 @@ describe("quote configuration workspace presentation", () => {
     expect(source).toContain("<PricingResolutionTable quote={quote} />");
     expect(source).toContain("Inventory resolved: {quote.configuration.inventoryResolvedCount} of {quote.configuration.inventoryRequiredCount} lines");
     expect(source).toContain("Apply all inventory recommendations to resolve pricing.");
+    expect(source).toContain("Confirm the product match before pricing can be resolved.");
+    expect(source).not.toContain("Pricing resolution is pending.");
     expect(source).toContain("Pricing resolved");
     expect(source).toContain("priceTypeLabel");
     expect(source).toContain("line.priceSource");

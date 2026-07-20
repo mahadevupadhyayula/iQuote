@@ -1,6 +1,7 @@
 import "server-only";
 
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
+import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
 import { evaluateQuoteReadiness, type QuoteReadinessEvaluation } from "@/lib/rules/readiness-rules";
 import type { ApprovalsRepository } from "@/lib/repositories/approvals";
 import type { CustomersRepository } from "@/lib/repositories/customers";
@@ -106,8 +107,10 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
   configuration: {
     inventoryRequiredCount: number;
     inventoryResolvedCount: number;
+    allInventorySelectionsApplied: boolean;
+    allProductMatchesConfirmed: boolean;
     allInventoryConfirmed: boolean;
-    pricingStatus: "not_started" | "pending_inventory" | "resolved" | "blocked";
+    pricingStatus: "pending_inventory" | "pending_product_confirmation" | "not_started" | "resolved" | "blocked";
     pricingResolved: boolean;
     pricingBlockers: Array<PricingBlocker>;
     canContinue: boolean;
@@ -269,11 +272,9 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
     const calculationsByLineId = new Map(calculated.lines.map((line) => [line.lineId, line]));
     const customerView = toCustomer(quote, customer);
     const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers) ? quote.metadata.pricing_blockers as PricingBlocker[] : [];
-    const inventoryRequiredCount = quote.items.filter((item) => Boolean(item.product_id)).length;
-    const inventoryResolvedCount = quote.items.filter((item) => Array.isArray(item.metadata.selected_fulfillment) && item.metadata.selected_fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string").length;
-    const allInventoryConfirmed = inventoryRequiredCount > 0 && inventoryRequiredCount === inventoryResolvedCount;
+    const { inventoryRequiredCount, inventoryResolvedCount, allInventorySelectionsApplied, allProductMatchesConfirmed, allInventoryConfirmed } = quoteConfigurationCompletion(quote.items);
     const pricingResolved = quote.items.length > 0 && quote.items.every((item) => item.metadata.pricing_resolved === true);
-    const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] = pricingBlockers.length > 0 ? "blocked" : pricingResolved ? "resolved" : allInventoryConfirmed ? "not_started" : "pending_inventory";
+    const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] = pricingBlockers.length > 0 ? "blocked" : pricingResolved ? "resolved" : !allInventorySelectionsApplied ? "pending_inventory" : !allProductMatchesConfirmed ? "pending_product_confirmation" : "not_started";
 
     return {
       ...customerView,
@@ -311,7 +312,7 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
       approvalStatus: approvalStatus(approvals),
       sla: sla(quote, now()),
       workflowEvents,
-      configuration: { inventoryRequiredCount, inventoryResolvedCount, allInventoryConfirmed, pricingStatus, pricingResolved, pricingBlockers, canContinue: readiness.ready && pricingResolved && pricingBlockers.length === 0 },
+      configuration: { inventoryRequiredCount, inventoryResolvedCount, allInventorySelectionsApplied, allProductMatchesConfirmed, allInventoryConfirmed, pricingStatus, pricingResolved, pricingBlockers, canContinue: readiness.ready && pricingResolved && pricingBlockers.length === 0 },
       internalNotes: quote.metadata.internal_notes,
       reviewMetadata: reviewMetadata(quote.metadata),
     };
