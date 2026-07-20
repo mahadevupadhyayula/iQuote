@@ -91,7 +91,7 @@ This calls `POST /api/demo/reset`, which deletes and recreates the Atlas/Northst
 
 ## PDF rendering
 
-Quote PDFs are rendered server-side without an external PDF runtime dependency. The endpoint prepares a customer-safe quote document model in `lib/pdf/quote-document.tsx`, then `lib/pdf/render-quote-pdf.ts` serializes a minimal PDF 1.4 document directly with built-in Node.js `Buffer` support, Type1 Helvetica fonts, drawing primitives, and escaped text content streams.
+Quote PDFs are rendered server-side with `@react-pdf/renderer`. The endpoint prepares a normalized customer-safe document model in `lib/pdf/quote-document.ts`, then `lib/pdf/render-quote-pdf.tsx` renders the multi-page customer PDF using React PDF primitives, repeated headers and footers, wrapped product descriptions, partial-quote not-included sections, commercial terms, and centralized fallback defaults.
 
 This keeps commercial truth deterministic: quote pricing, totals, approval state, and customer-safe line details come from the approved quote view model rather than from an AI or third-party rendering service.
 

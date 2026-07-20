@@ -81,7 +81,7 @@ describe("quote PDF route", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
     expect(response.headers.get("Content-Disposition")).toBe('inline; filename="quote-Q-APPROVED-1.pdf"');
-    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 8).toString("utf8")).toBe("%PDF-1.4");
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString("utf8")).toBe("%PDF");
     expect(repositories.quotes.findById).toHaveBeenCalledWith(quoteId);
   });
 });

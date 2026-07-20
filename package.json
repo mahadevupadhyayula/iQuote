@@ -22,9 +22,11 @@
     "test:e2e:scenario-b": "playwright test tests/e2e/scenario-b-discount-exception.spec.ts",
     "test:e2e:scenario-c": "playwright test tests/e2e/scenario-c-inventory-exception.spec.ts",
     "db:verify-local": "node scripts/verify-local-supabase-target.mjs",
-    "db:verify-reset": "node scripts/verify-reset-state.mjs"
+    "db:verify-reset": "node scripts/verify-reset-state.mjs",
+    "pdf:sample": "tsx scripts/generate-sample-pdfs.tsx"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.3.0",
     "next": "^15.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -59,6 +61,7 @@
     "@eslint/js": "^9.39.5",
     "eslint-config-next": "^15.3.3",
     "typescript-eslint": "^8.34.1",
-    "eslint-config-prettier": "^10.1.5"
+    "eslint-config-prettier": "^10.1.5",
+    "tsx": "^4.20.3"
   }
 }
