@@ -11,7 +11,6 @@ import type { PriceRecord, QuoteItemRecord } from "@/lib/schemas/shared-records"
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
 import type { BasisPoints } from "@/lib/utils/money";
 
-export { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 
 export type PricingBlockerCode = "missing_price" | "expired_price" | "currency_mismatch" | "missing_unit_cost" | "unresolved_product_match" | "pricing_resolution_failed";
 export type PricingBlocker = { code: PricingBlockerCode; message: string; lineNumber?: number };
