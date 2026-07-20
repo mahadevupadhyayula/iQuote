@@ -1,6 +1,7 @@
 import "server-only";
 
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
+import { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import type { CustomersRepository } from "@/lib/repositories/customers";
 import type { PricesRepository } from "@/lib/repositories/prices";
@@ -9,6 +10,8 @@ import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-event
 import type { PriceRecord, QuoteItemRecord } from "@/lib/schemas/shared-records";
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
 import type { BasisPoints } from "@/lib/utils/money";
+
+export { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 
 export type PricingBlockerCode = "missing_price" | "expired_price" | "currency_mismatch" | "missing_unit_cost" | "unresolved_product_match" | "pricing_resolution_failed";
 export type PricingBlocker = { code: PricingBlockerCode; message: string; lineNumber?: number };
@@ -38,28 +41,6 @@ const validatePrice = (price: PriceRecord | null, productId: string, currencyCod
   if (!price.source_name || !price.source_version) return blocker("pricing_resolution_failed", `Price source metadata is required for quote line ${lineNumber}.`, lineNumber);
   return null;
 };
-
-export const quoteConfigurationCompletion = (items: QuoteItemRecord[]) => {
-  const inventoryRequiredCount = items.filter((item) => Boolean(item.product_id)).length;
-  const inventoryResolvedCount = items.filter((item) => {
-    const fulfillment = item.metadata.selected_fulfillment;
-    return Boolean(item.product_id && item.metadata.selected_inventory_decision && Array.isArray(fulfillment) && fulfillment.length > 0 && typeof item.metadata.inventory_confirmed_at === "string");
-  }).length;
-  const allInventorySelectionsApplied = inventoryRequiredCount > 0 && inventoryRequiredCount === inventoryResolvedCount;
-  const allProductMatchesConfirmed = items.every((item) => {
-    const productState = normalizeProductMatchState(item.metadata, item.product_id);
-    return Boolean(productState.productId && productState.confirmed);
-  });
-  return {
-    inventoryRequiredCount,
-    inventoryResolvedCount,
-    allInventorySelectionsApplied,
-    allProductMatchesConfirmed,
-    allInventoryConfirmed: allInventorySelectionsApplied && allProductMatchesConfirmed,
-  };
-};
-
-export const allInventoryConfirmed = (items: QuoteItemRecord[]) => quoteConfigurationCompletion(items).allInventoryConfirmed;
 
 export const createQuotePricingResolutionService = (repositories: QuotePricingResolutionRepositories) => ({
   async resolveQuotePricing({ quoteId, actorId = null, onDate = new Date().toISOString().slice(0, 10) }: { quoteId: string; actorId?: string | null; onDate?: string }) {

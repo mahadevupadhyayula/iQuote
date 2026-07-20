@@ -9,6 +9,7 @@ const customerId = "22222222-2222-4222-8222-222222222222";
 const actorId = "33333333-3333-4333-8333-333333333333";
 const productId = "99999999-9999-4999-8999-999999999999";
 const timestamp = "2026-07-18T12:00:00.000Z";
+const freshInventoryTimestamp = new Date().toISOString();
 
 const buildItem = (overrides = {}) => ({
   id: "44444444-4444-4444-8444-444444444444",
@@ -71,7 +72,7 @@ const repositories = {
   },
   products: { findById: vi.fn(async () => ({ id: productId, sku: "SKU-1", name: "Matched product", status: "active", description: null, unit_of_measure: "ea", metadata: {}, created_at: timestamp, updated_at: timestamp })), listSubstitutes: vi.fn(async () => []) },
   inventory: {
-    listByProduct: vi.fn(async () => [{ id: "10101010-1010-4010-8010-101010101010", product_id: productId, warehouse_code: "MAIN", quantity_on_hand: 5, quantity_reserved: 0, reorder_point: 0, source_name: "test", source_version: "v1", refreshed_at: timestamp, metadata: {}, updated_at: timestamp }]),
+    listByProduct: vi.fn(async () => [{ id: "10101010-1010-4010-8010-101010101010", product_id: productId, warehouse_code: "MAIN", quantity_on_hand: 5, quantity_reserved: 0, reorder_point: 0, source_name: "test", source_version: "v1", refreshed_at: freshInventoryTimestamp, metadata: {}, updated_at: freshInventoryTimestamp }]),
     listByProducts: vi.fn(async () => []),
     findAtLocation: vi.fn(async () => null),
   },

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 vi.mock("server-only", () => ({}));
 
 import { createQuoteWorkspaceQueryService } from "@/lib/services/quote-workspace-query-service";
-import { allInventoryConfirmed } from "@/lib/services/quote-pricing-resolution-service";
+import { allInventoryConfirmed } from "@/lib/rules/quote-configuration-completion";
 import type { QuoteWithItems } from "@/lib/repositories/quotes";
 
 const timestamp = "2026-07-18T12:00:00.000Z";
@@ -166,6 +167,13 @@ describe("quote workspace query service", () => {
     const view = await createQuoteWorkspaceQueryService(unresolvedRepositories as never, () => new Date(timestamp)).getInternalWorkspace(quoteId);
 
     expect(view?.configuration).toMatchObject({ allInventorySelectionsApplied: true, allProductMatchesConfirmed: false, allInventoryConfirmed: false, pricingStatus: "pending_product_confirmation" });
+  });
+
+  it("imports quote configuration completion from the canonical rules module", () => {
+    const source = readFileSync("lib/services/quote-workspace-query-service.ts", "utf8");
+
+    expect(source).toContain('import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";');
+    expect(source).not.toContain('quoteConfigurationCompletion, type PricingBlocker } from "@/lib/services/quote-pricing-resolution-service"');
   });
 
 });
