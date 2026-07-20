@@ -1,6 +1,7 @@
 import type { QuoteItemCreateInput } from "@/lib/repositories/quotes";
 import type { ExtractionOutput } from "@/lib/schemas/extraction-schema";
 import type { ProductRecord } from "@/lib/schemas/shared-records";
+import type { InventoryDecision } from "@/lib/rules/inventory-rules";
 import type { ProductResolution } from "@/lib/services/product-resolver-service";
 
 export type IntakeProductCandidate = Pick<ProductRecord, "id" | "sku" | "name" | "status">;
@@ -12,6 +13,10 @@ export type IntakeLinePersistenceInput = {
   quantity: number | null;
   deterministicResolution: ProductResolution;
   candidates: IntakeProductCandidate[];
+  price?: { id: string; currency_code: string; unit_price: number; effective_from: string; effective_to: string | null } | null;
+  inventoryDecision?: InventoryDecision | null;
+  requestedDiscountBps?: number;
+  approvalRequired?: boolean;
 };
 
 export const toIntakeRequirementsMetadata = (extraction: ExtractionOutput, lines: IntakeLinePersistenceInput[]) => ({
@@ -46,7 +51,11 @@ export const toIntakeRequirementsMetadata = (extraction: ExtractionOutput, lines
           }
         : null,
       candidates: line.candidates.map(({ id, sku, name, status }) => ({ id, sku, name, status })),
-      review_required: true,
+      active_price: line.price,
+      inventory_decision: line.inventoryDecision ?? null,
+      requested_discount_bps: line.requestedDiscountBps ?? 0,
+      approval_required: line.approvalRequired ?? false,
+      review_required: line.quantity === null || !line.deterministicResolution.product || Boolean(line.inventoryDecision?.blocked) || Boolean(line.approvalRequired),
     })),
   },
 });
@@ -82,6 +91,10 @@ export const toReviewRequiredQuoteItems = (lines: IntakeLinePersistenceInput[]):
               }
             : null,
           candidates: line.candidates.map(({ id, sku, name, status }) => ({ id, sku, name, status })),
+          active_price: line.price,
+          inventory_decision: line.inventoryDecision ?? null,
+          requested_discount_bps: line.requestedDiscountBps ?? 0,
+          approval_required: line.approvalRequired ?? false,
         },
       };
     });

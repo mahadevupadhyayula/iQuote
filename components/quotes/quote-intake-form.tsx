@@ -21,6 +21,7 @@ import {
   type IntakeActionState,
 } from "@/app/quotes/new/actions";
 import { WorkspaceGrid } from "@/components/app-shell/workspace-grid";
+import { intakeBusinessReviewLabels } from "@/lib/rules/intake-classification-rules";
 import {
   quoteIntakeSchema,
   type QuoteIntakeInput,
@@ -458,9 +459,9 @@ function ResultPanel({ result }: { result: IntakeActionState }) {
       <AlertDescription>
         Quote status is {result.status}. Extraction is{" "}
         {result.extractionStatus === "completed"
-          ? "ready for review"
+          ? "completed"
           : "in manual fallback"}
-        .
+        . Business state: {intakeBusinessReviewLabels[result.businessReviewStatus]}.
         <span className="mt-2 block text-xs text-slate-600">
           SLA started {formatDateTime(result.slaStartedAt)} and is due {formatDateTime(result.slaDueAt)}.
         </span>{" "}

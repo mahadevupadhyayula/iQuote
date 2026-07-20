@@ -6,15 +6,18 @@ vi.mock("@/lib/db/server", () => ({ createServerSupabaseClient: vi.fn(() => ({})
 const state = vi.hoisted(() => {
   const timestamp = "2026-07-18T12:00:00.000Z";
   const customer = { id: "22222222-2222-4222-8222-222222222222", external_id: "buyer@example.com", name: "Atlas", legal_name: null, domain: null, billing_email: "buyer@example.com", phone: null, billing_address: {}, shipping_address: {}, metadata: {}, created_at: timestamp, updated_at: timestamp };
+  const product = { id: "20000000-0000-4000-8000-000000000200", sku: "AX-200", name: "AX-200 Industrial Actuator", description: "Heavy-duty", status: "active", unit_of_measure: "each", metadata: {}, created_at: timestamp, updated_at: timestamp };
   const quote = { id: "11111111-1111-4111-8111-111111111111", opportunity_id: null, customer_id: customer.id, quote_number: "Q-1000", status: "draft", currency_code: "USD", subtotal_amount: 0, discount_amount: 0, tax_amount: 0, total_amount: 0, valid_until: null, submitted_at: null, approved_at: null, sent_at: null, accepted_at: null, sla_due_at: null, metadata: {}, created_at: timestamp, updated_at: timestamp, items: [] };
-  return { timestamp, customer, quote: { ...quote }, baseQuote: quote, events: [] as Record<string, unknown>[], extractionOutput: null as Record<string, unknown> | null, extractionError: new Error("OpenAI request timed out with sk-secret") as Error | null };
+  return { timestamp, customer, product, quote: { ...quote }, baseQuote: quote, events: [] as Record<string, unknown>[], extractionOutput: null as Record<string, unknown> | null, extractionError: new Error("OpenAI request timed out with sk-secret") as Error | null };
 });
 
 const repositories = vi.hoisted(() => ({
   customers: { findByExternalId: vi.fn(), create: vi.fn() },
   quotes: { create: vi.fn(), findById: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), replaceItems: vi.fn() },
   workflowEvents: { record: vi.fn(), findByIdempotencyKey: vi.fn() },
-  products: { search: vi.fn(), findBySku: vi.fn(), findByAlias: vi.fn() },
+  products: { search: vi.fn(), findBySku: vi.fn(), findByAlias: vi.fn(), findReplacement: vi.fn(), listSubstitutes: vi.fn() },
+  prices: { findCurrentPrice: vi.fn(), listActiveDiscountPolicies: vi.fn() },
+  inventory: { listByProduct: vi.fn(), listByProducts: vi.fn(), findAtLocation: vi.fn() },
 }));
 
 vi.mock("@/lib/repositories", () => ({ createRepositories: vi.fn(() => repositories) }));
@@ -70,9 +73,16 @@ describe("submitQuoteIntake", () => {
       state.quote = { ...state.quote, status };
       return state.quote;
     });
-    repositories.products.findBySku.mockResolvedValue(null);
+    repositories.products.findBySku.mockResolvedValue(state.product);
     repositories.products.findByAlias.mockResolvedValue(null);
-    repositories.products.search.mockResolvedValue([]);
+    repositories.products.findReplacement.mockResolvedValue(null);
+    repositories.products.listSubstitutes.mockResolvedValue([]);
+    repositories.products.search.mockResolvedValue([state.product]);
+    repositories.prices.findCurrentPrice.mockResolvedValue({ id: "price-1", product_id: state.product.id, currency_code: "USD", unit_price: 1280, unit_cost: 820, price_type: "list", customer_id: null, customer_tier: null, effective_from: "2026-01-01", effective_to: null, source_name: "test", source_version: "1", created_at: state.timestamp });
+    repositories.prices.listActiveDiscountPolicies.mockResolvedValue([{ id: "policy-1", active: true, policy_type: "percent_off", discount_bps: 800, max_discount_bps: 1500, amount_off: 0, minimum_margin_bps: 0, conditions: {}, metadata: {}, starts_on: null, ends_on: null, name: "Demo", description: null, created_at: state.timestamp, updated_at: state.timestamp }]);
+    repositories.inventory.listByProduct.mockResolvedValue([{ id: "inv-1", product_id: state.product.id, location_code: "DAL-02", warehouse_code: "DAL-02", quantity_on_hand: 8, quantity_reserved: 0, reorder_point: 3, source_name: "test", source_version: "1", refreshed_at: state.timestamp, updated_at: state.timestamp }]);
+    repositories.inventory.listByProducts.mockResolvedValue([]);
+    repositories.inventory.findAtLocation.mockResolvedValue(null);
     repositories.quotes.replaceItems.mockResolvedValue([]);
     repositories.workflowEvents.findByIdempotencyKey.mockResolvedValue(null);
     repositories.workflowEvents.record.mockImplementation(async (input: Record<string, unknown>) => {
@@ -100,7 +110,7 @@ describe("submitQuoteIntake", () => {
 
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15." });
 
-    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "reviewing", extractionStatus: "completed" });
+    expect(result).toMatchObject({ ok: true, quoteId: state.baseQuote.id, status: "reviewing", extractionStatus: "completed", businessReviewStatus: "ready_for_review" });
   });
 
   it("returns reviewing when extraction reports ambiguous information requiring review", async () => {
@@ -115,7 +125,7 @@ describe("submitQuoteIntake", () => {
 
     const result = await submitQuoteIntake({ customerName: "Atlas", customerEmail: "buyer@example.com", currencyCode: "USD", requestText: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear." });
 
-    expect(result).toMatchObject({ ok: true, status: "reviewing" });
+    expect(result).toMatchObject({ ok: true, status: "reviewing", businessReviewStatus: "clarification_required" });
     expect(result.ok && result.clarificationQuestions).toEqual(expect.arrayContaining([expect.objectContaining({ field: "installation_requirement" })]));
   });
 });

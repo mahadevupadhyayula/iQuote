@@ -28,7 +28,7 @@ const extractedValue = (quote: QuoteWithItems, path: string) => {
   return primitive(fields[path]);
 };
 
-const resolveField = async (quote: QuoteWithItems, path: string, raw: unknown, repositories: ReturnType<typeof createRepositories>, reviewedAt: string) => {
+const resolveField = async (quote: QuoteWithItems, path: string, raw: unknown, repositories: ReturnType<typeof createRepositories>) => {
   const def = getReviewFieldDefinition(path);
   const original = extractedValue(quote, path);
   const extraction = asObject(quote.metadata.extraction);
@@ -65,12 +65,11 @@ export async function saveReviewInformation(input: ReviewInformationInput): Prom
   const quote = await repositories.quotes.findById(data.quoteId);
   if (!quote) return { ok: false, fieldErrors: {}, formError: "Quote was not found." };
   const reviewedAt = new Date().toISOString();
-  const extraction = asObject(quote.metadata.extraction);
   const fields = data.fields;
   const itemIndexes = [...new Set(Object.keys(fields).map((p) => getReviewFieldDefinition(p)?.itemIndex).filter((i): i is number => i != null))];
   if (itemIndexes.length === 0) itemIndexes.push(0);
   const paths = ["customer_name", "opportunity_name", "currency", "delivery_location", "delivery_date", "requested_discount", "installation_requirement", "special_requirements", ...itemIndexes.flatMap((i) => [`requested_items[${i}].raw_item_description`, `requested_items[${i}].requested_sku`, `requested_items[${i}].quantity`, `requested_items[${i}].specifications`])];
-  const resolvedEntries = await Promise.all(paths.map(async (path) => [path, await resolveField(quote, path, fields[path], repositories, reviewedAt)] as const));
+  const resolvedEntries = await Promise.all(paths.map(async (path) => [path, await resolveField(quote, path, fields[path], repositories)] as const));
   const resolved = Object.fromEntries(resolvedEntries);
   const errors: Record<string, string> = {};
   if (data.intent === "continue") {

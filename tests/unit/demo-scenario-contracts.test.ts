@@ -4,6 +4,7 @@ import { intakeSeedExamples } from "@/lib/fixtures/intake-seed-examples";
 import { quoteIntakeSchema, quoteIntakeSeedIds } from "@/lib/schemas/quote-intake";
 import { demoProducts, demoScenarioContracts, seededDiscountPolicies } from "@/lib/demo/scenario-contracts";
 import { evaluateApprovalPolicy } from "@/lib/rules/approval-rules";
+import { classifyIntakeBusinessReview } from "@/lib/rules/intake-classification-rules";
 import { evaluateInventory, type InventoryRuleRecord } from "@/lib/rules/inventory-rules";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import { evaluateQuoteReadiness } from "@/lib/rules/readiness-rules";
@@ -28,7 +29,7 @@ const inventory: InventoryRuleRecord[] = [
   { productId: demoProducts.hx500.id, locationCode: "SEA-01", quantityOnHand: 4, quantityReserved: 0, reorderPoint: 2, updatedAt: now },
 ];
 
-const products = [demoProducts.ax200, demoProducts.hx500].map(({ id, sku, name, status }) => ({ id, sku, name, status }));
+const products = [demoProducts.ax200, demoProducts.ax200FilterKit, demoProducts.hx500].map(({ id, sku, name, status }) => ({ id, sku, name, status }));
 
 const expectValidStatusPath = (path: QuoteStatus[]) => {
   for (let index = 0; index < path.length - 1; index += 1) {
@@ -39,6 +40,11 @@ const expectValidStatusPath = (path: QuoteStatus[]) => {
 describe("demo scenario contracts", () => {
   it.each(demoScenarioContracts)("asserts Scenario $id against deterministic rules and services", (contract: DemoScenarioContract) => {
     const product = products.find((candidate) => candidate.sku === contract.input.line.sku);
+    if (contract.id === "E") {
+      expect(product).toBeUndefined();
+      expect(contract.expected.productMatch).toMatchObject({ sku: "ZX-999-UNKNOWN", confidenceBps: 0 });
+      return;
+    }
     expect(product).toBeDefined();
     expect({ productId: product?.id, sku: product?.sku, method: "sku", confidenceBps: 10_000 }).toEqual(contract.expected.productMatch);
 
@@ -80,6 +86,7 @@ describe("demo scenario contracts", () => {
     });
     expect(approval).toMatchObject({ requirement: contract.expected.discountDecision.approvalRequirement, requiredRole: contract.expected.discountDecision.requiredRole });
 
+    const readinessInventoryDecisions = contract.id === "D" ? [inventoryDecision] : [inventoryDecision];
     const readiness = evaluateQuoteReadiness({
       customerId: contract.input.customerId,
       currencyCode: contract.input.currencyCode,
@@ -95,7 +102,7 @@ describe("demo scenario contracts", () => {
         effectiveFrom: contract.expected.price.effectiveFrom,
         effectiveTo: contract.expected.price.effectiveTo,
       }],
-      inventoryDecisions: [inventoryDecision],
+      inventoryDecisions: readinessInventoryDecisions,
       marginPolicy: evaluateMarginFloor({ sellPriceCents: calculation.sellPriceCents, costCents: calculation.costCents, floorBps: contract.id === "B" ? 2_500 : 3_000 }),
       commercialCalculation: { subtotalAmount: calculation.subtotalCents / 100, discountAmount: calculation.discountAmountCents / 100, totalAmount: calculation.sellPriceCents / 100, grossMarginBps: calculation.grossMarginBps },
       discountPolicyEvaluation: approval,
@@ -106,6 +113,16 @@ describe("demo scenario contracts", () => {
     });
     expect({ ready: readiness.ready, status: readiness.status, blockerCodes: readiness.blockers.map((blocker) => blocker.code) }).toEqual(contract.expected.readinessResult);
     expectValidStatusPath(contract.expected.quoteStatusPath);
+  });
+
+  it("classifies successful extraction outcomes without using technical failure labels", () => {
+    const baseExtraction = { missing_fields: [], ambiguities: [], clarification_questions: [] };
+    expect(classifyIntakeBusinessReview({ extraction: baseExtraction as never, productResolutions: [{ product: demoProducts.ax200 } as never], inventoryDecisions: [{ blocked: false, status: "single_warehouse" } as never] })).toBe("ready_for_review");
+    expect(classifyIntakeBusinessReview({ extraction: baseExtraction as never, productResolutions: [{ product: demoProducts.ax200 } as never], inventoryDecisions: [{ blocked: false, status: "single_warehouse" } as never], approvalRequired: true })).toBe("approval_required");
+    expect(classifyIntakeBusinessReview({ extraction: { ...baseExtraction, ambiguities: [{ field: "installation_requirement", description: "ambiguous" }], clarification_questions: [{ field: "installation_requirement", question: "Clarify installation?" }] } as never })).toBe("clarification_required");
+    expect(classifyIntakeBusinessReview({ extraction: baseExtraction as never, productResolutions: [{ product: null } as never] })).toBe("unresolved_product");
+    expect(classifyIntakeBusinessReview({ extraction: baseExtraction as never, productResolutions: [{ product: demoProducts.ax200 } as never], inventoryDecisions: [{ blocked: true, status: "backordered" } as never] })).toBe("inventory_shortage");
+    expect(classifyIntakeBusinessReview({ extraction: null })).toBe("technical_extraction_failure");
   });
 });
 
@@ -129,20 +146,48 @@ describe("intake seed examples", () => {
     }
   });
 
-  it("covers the Atlas request contract for controlled demo extraction", () => {
-    const atlasSeed = intakeSeedExamples.find(
-      (example) => example.id === "atlas-install-ambiguity",
-    );
+  it("covers all five requested quote-intake demo scenarios", () => {
+    expect(intakeSeedExamples.map((example) => example.label)).toEqual([
+      "Standard quote — ready for review",
+      "Large discount — approval required",
+      "Ambiguous requirements — clarification needed",
+      "Insufficient stock — fulfillment review",
+      "Unknown SKU — product review",
+    ]);
+    expect(intakeSeedExamples[0].requestText).toContain("SKU AX-200-FKIT");
+    expect(intakeSeedExamples[1].requestText).toContain("12% discount");
+    expect(intakeSeedExamples[2].requestText).toContain("clarify the installation approach");
+    expect(intakeSeedExamples[3].requestText).toContain("19 units of SKU AX-200");
+    expect(intakeSeedExamples[4].requestText).toContain("ZX-999-UNKNOWN");
+  });
+});
 
-    expect(atlasSeed).toBeDefined();
-    expect(atlasSeed?.metadata.customerName).toBe("Atlas Manufacturing");
-    expect(atlasSeed?.metadata.opportunityName).toBe("Dallas Paint Line Expansion");
-    expect(atlasSeed?.metadata.validUntil).toBe("2026-09-15");
-    expect(atlasSeed?.requestText).toContain("requested fields");
-    expect(atlasSeed?.requestText).toContain("Installation is ambiguous");
-    expect(atlasSeed?.requestText).toContain("AX-200");
-    expect(atlasSeed?.requestText).toContain(
-      "delivery to Dallas no later than September 15, 2026",
-    );
+describe("demo reset seed payloads", () => {
+  it("uses warehouse_code, not location_code, in direct inventory seed payloads", async () => {
+    const fs = await import("node:fs/promises");
+    const source = await fs.readFile("lib/services/demo-reset-service.ts", "utf8");
+    const inventorySection = source.slice(source.indexOf("const inventory = ["), source.indexOf("const discountPolicies"));
+    expect(inventorySection).toContain("warehouse_code");
+    expect(inventorySection).not.toContain("location_code");
+
+    const sqlSeed = await fs.readFile("supabase/seed.sql", "utf8");
+    const sqlInventorySection = sqlSeed.slice(sqlSeed.indexOf("insert into public.inventory"), sqlSeed.indexOf("insert into public.discount_policies"));
+    expect(sqlInventorySection).toContain("warehouse_code");
+    expect(sqlInventorySection).not.toContain("location_code");
+  });
+
+  it("keeps supabase seed.sql aligned with the AX-200 filter-kit demo path", async () => {
+    const sqlSeed = await import("node:fs/promises").then((fs) => fs.readFile("supabase/seed.sql", "utf8"));
+    expect(sqlSeed).toContain("AX-200-FKIT");
+    expect(sqlSeed).toContain("AX-200 compatible filter kit");
+    expect(sqlSeed).toContain("matching spare filters");
+    expect(sqlSeed).toContain("'40000000-0000-4000-8000-000000000211'");
+    expect(sqlSeed).toContain("'50000000-0000-4000-8000-000000000211'");
+    expect(sqlSeed).toContain("'AX-200-FKIT', 'AX-200 Compatible Filter Kit'");
+    expect(sqlSeed).toContain("'USD', 145.00");
+    expect(sqlSeed).toContain('"compatible_with":"AX-200"');
+    expect(sqlSeed).toContain('"approval_required_above_bps":800');
+    expect(sqlSeed).toContain("'INST-STD'");
+    expect(sqlSeed).not.toContain("'INST-PKG'");
   });
 });
