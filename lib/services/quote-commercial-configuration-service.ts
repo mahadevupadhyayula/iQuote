@@ -1,6 +1,7 @@
 import "server-only";
 
 import { evaluateQuoteReadiness } from "@/lib/rules/readiness-rules";
+import { isQuotableLine, isUnavailableLine } from "@/lib/domain/quote-line-resolution";
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import type { ApprovalsRepository } from "@/lib/repositories/approvals";
@@ -46,6 +47,8 @@ export const createQuoteCommercialConfigurationService = (repositories: Commerci
 
     const replacements: Omit<QuoteItemCreateInput, "quote_id">[] = [];
     for (const item of quote.items.sort((a, b) => a.line_number - b.line_number)) {
+      if (isUnavailableLine(item)) { replacements.push({ product_id: null, line_number: item.line_number, sku: item.sku, description: item.description, quantity: item.quantity, unit_price: 0, discount_bps: item.discount_bps, discount_amount: 0, line_total_amount: 0, metadata: { ...item.metadata, pricing_blocker: null, pricing_resolved: false } }); continue; }
+      if (!isQuotableLine(item)) { replacements.push(item); continue; }
       const metadata = { ...item.metadata };
       const product = item.product_id ? productsById.get(item.product_id) : null;
       let unitPrice = item.unit_price;
@@ -87,23 +90,24 @@ export const createQuoteCommercialConfigurationService = (repositories: Commerci
     }
 
     const items = await repositories.quotes.replaceItems(quote.id, replacements);
-    const calculated = calculateQuote(items.map((item) => ({ lineId: item.id, quantity: item.quantity, unitPriceCents: cents(item.unit_price), unitCostCents: cents(numberMeta(item.metadata, "unit_cost")), discountBps: item.discount_bps as BasisPoints })));
+    const pricedItems = items.filter(isQuotableLine);
+    const calculated = calculateQuote(pricedItems.map((item) => ({ lineId: item.id, quantity: item.quantity, unitPriceCents: cents(item.unit_price), unitCostCents: cents(numberMeta(item.metadata, "unit_cost")), discountBps: item.discount_bps as BasisPoints })));
     const marginFloorBps = numberMeta(quote.metadata, "margin_floor_bps") as BasisPoints;
     const marginPolicy = evaluateMarginFloor({ sellPriceCents: calculated.sellPriceCents, costCents: calculated.costCents, floorBps: marginFloorBps });
     const discountBps = calculated.subtotalCents > 0 ? Math.round((calculated.discountAmountCents / calculated.subtotalCents) * 10_000) as BasisPoints : 0 as BasisPoints;
     const approvalEvaluation = await createApprovalService(repositories.prices).evaluatePolicy({ requestedDiscountBps: discountBps, projectedMarginBps: calculated.grossMarginBps, onDate });
     const approvals = await repositories.approvals.listByQuote(quote.id);
-    const prices = items.map((item) => metadataObject(item.metadata.price_application)).filter((p) => typeof p.product_id === "string").map((p) => ({ productId: p.product_id as string, unitPrice: items.find((i) => i.product_id === p.product_id)?.unit_price ?? null, unitCost: numberMeta(items.find((i) => i.product_id === p.product_id)?.metadata ?? {}, "unit_cost"), currencyCode: p.currency_code as string, effectiveFrom: p.effective_from as string, effectiveTo: p.effective_to as string | null, sourceName: p.source_name as string, sourceVersion: p.source_version as string }));
-    const readiness = evaluateQuoteReadiness({ customerId: quote.customer_id, currencyCode: quote.currency_code, lines: items.map((item) => ({ productId: item.product_id, sku: item.sku, description: item.description, quantity: item.quantity })), products, prices, inventoryDecisions: items.map((item) => item.metadata.selected_inventory_decision ?? item.metadata.inventory_decision).filter(Boolean) as never, marginPolicy, commercialCalculation: { subtotalAmount: money(calculated.subtotalCents), discountAmount: money(calculated.discountAmountCents), totalAmount: money(calculated.netTotalCents), grossMarginBps: calculated.grossMarginBps }, discountPolicyEvaluation: approvalEvaluation, approvals: approvals.map((approval) => ({ requiredRole: approval.required_role, status: approval.status })), paymentTerms: quote.metadata.payment_terms as never, slaDueAt: quote.sla_due_at, quoteStatus: quote.status, blockingExceptions });
-    const pricingBlockers = items.flatMap((item) => {
+    const prices = pricedItems.map((item) => metadataObject(item.metadata.price_application)).filter((p) => typeof p.product_id === "string").map((p) => ({ productId: p.product_id as string, unitPrice: items.find((i) => i.product_id === p.product_id)?.unit_price ?? null, unitCost: numberMeta(items.find((i) => i.product_id === p.product_id)?.metadata ?? {}, "unit_cost"), currencyCode: p.currency_code as string, effectiveFrom: p.effective_from as string, effectiveTo: p.effective_to as string | null, sourceName: p.source_name as string, sourceVersion: p.source_version as string }));
+    const readiness = evaluateQuoteReadiness({ customerId: quote.customer_id, currencyCode: quote.currency_code, lines: pricedItems.map((item) => ({ productId: item.product_id, sku: item.sku, description: item.description, quantity: item.quantity })), products, prices, inventoryDecisions: pricedItems.map((item) => item.metadata.selected_inventory_decision ?? item.metadata.inventory_decision).filter(Boolean) as never, marginPolicy, commercialCalculation: { subtotalAmount: money(calculated.subtotalCents), discountAmount: money(calculated.discountAmountCents), totalAmount: money(calculated.netTotalCents), grossMarginBps: calculated.grossMarginBps }, discountPolicyEvaluation: approvalEvaluation, approvals: approvals.map((approval) => ({ requiredRole: approval.required_role, status: approval.status })), paymentTerms: quote.metadata.payment_terms as never, slaDueAt: quote.sla_due_at, quoteStatus: quote.status, blockingExceptions });
+    const pricingBlockers = pricedItems.flatMap((item) => {
       const blocker = item.metadata.pricing_blocker;
       return blocker && typeof blocker === "object" && item.metadata.pricing_resolved !== true
         ? [blocker]
         : [];
     });
     const pricingResolved =
-      items.length > 0 &&
-      items.every((item) => item.metadata.pricing_resolved === true);
+      pricedItems.length > 0 &&
+      pricedItems.every((item) => item.metadata.pricing_resolved === true);
     const updated = await repositories.quotes.update(quote.id, { subtotal_amount: money(calculated.subtotalCents), discount_amount: money(calculated.discountAmountCents), total_amount: money(calculated.netTotalCents), metadata: { ...quote.metadata, pricing_status: pricingBlockers.length > 0 ? "blocked" : pricingResolved ? "resolved" : "not_started", pricing_resolved: pricingResolved, pricing_blockers: pricingBlockers, readiness, commercial_calculation: { cost_amount: money(calculated.costCents), gross_profit_amount: money(calculated.grossProfitCents), gross_margin_bps: calculated.grossMarginBps }, approval_evaluation: approvalEvaluation } });
     await Promise.all(events);
     return { quote: updated, items, calculation: calculated, readiness, approvalEvaluation, effectiveDiscountBps: discountBps };

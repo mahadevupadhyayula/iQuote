@@ -1,6 +1,7 @@
 import "server-only";
 
 import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
+import { isQuotableLine, isUnavailableLine, isUnresolvedLine } from "@/lib/domain/quote-line-resolution";
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
 import type { CustomersRepository } from "@/lib/repositories/customers";
 import type { PricesRepository } from "@/lib/repositories/prices";
@@ -149,11 +150,23 @@ export const createQuotePricingResolutionService = (
     const blockers: PricingBlocker[] = [];
     const replacements: Omit<QuoteItemCreateInput, "quote_id">[] = [];
     const appliedAt = new Date().toISOString();
+    const sortedItems = quote.items.slice().sort((a, b) => a.line_number - b.line_number);
+    const quotableItems = sortedItems.filter(isQuotableLine);
+    const unavailableItems = sortedItems.filter(isUnavailableLine);
+    const unresolvedItems = sortedItems.filter(isUnresolvedLine);
 
-    for (const item of quote.items
+    for (const item of sortedItems
       .slice()
       .sort((a, b) => a.line_number - b.line_number)) {
       const metadata = { ...item.metadata };
+      if (isUnavailableLine(item)) {
+        replacements.push(toReplacement(item, { ...metadata, pricing_resolved: false, pricing_blocker: null, price_application: null, unit_cost: null }, { product_id: null, unit_price: 0, discount_amount: 0, line_total_amount: 0 }));
+        continue;
+      }
+      if (!isQuotableLine(item)) {
+        replacements.push(toReplacement(item, { ...metadata, pricing_resolved: false, pricing_blocker: null, price_application: null }));
+        continue;
+      }
       const state = normalizeProductMatchState(metadata, item.product_id);
       if (!state.productId || !state.confirmed) {
         blockers.push(
@@ -267,8 +280,9 @@ export const createQuotePricingResolutionService = (
       quote.id,
       replacements,
     );
+    const pricedItems = items.filter(isQuotableLine);
     const calculation = calculateQuote(
-      items.map((item) => ({
+      pricedItems.map((item) => ({
         lineId: item.id,
         quantity: item.quantity,
         unitPriceCents: cents(item.unit_price),
@@ -277,6 +291,7 @@ export const createQuotePricingResolutionService = (
       })),
     );
     const status = blockers.length > 0 ? "blocked" : "resolved";
+    const pricingResolved = quotableItems.length > 0 && blockers.length === 0;
     const updated = await repositories.quotes.update(quote.id, {
       subtotal_amount: money(calculation.subtotalCents),
       discount_amount: money(calculation.discountAmountCents),
@@ -284,7 +299,10 @@ export const createQuotePricingResolutionService = (
       metadata: {
         ...quote.metadata,
         pricing_status: status,
-        pricing_resolved: blockers.length === 0,
+        pricing_resolved: pricingResolved,
+        pricing_selected_line_count: quotableItems.length,
+        pricing_unavailable_line_count: unavailableItems.length,
+        pricing_unresolved_line_count: unresolvedItems.length,
         pricing_blockers: blockers,
         commercial_calculation: {
           gross_amount: money(calculation.subtotalCents),
@@ -312,7 +330,7 @@ export const createQuotePricingResolutionService = (
       from_status: quote.status,
       to_status: quote.status,
       payload: {
-        action: "pricing_resolution",
+        action: pricingResolved && (unavailableItems.length > 0 || unresolvedItems.length > 0) ? "partial_quote_pricing_resolved" : "pricing_resolution",
         status,
         blocker_count: blockers.length,
       },
@@ -322,7 +340,7 @@ export const createQuotePricingResolutionService = (
       items,
       calculation,
       blockers,
-      pricingResolved: blockers.length === 0,
+      pricingResolved,
     };
   },
 });

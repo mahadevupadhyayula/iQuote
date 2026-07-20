@@ -51,6 +51,16 @@ export const createProductsRepository = (client: RepositoryClient) => {
     return products.length === 1 ? products[0] : null;
   },
 
+  async listActive(options: { query?: string; limit?: number } = {}) {
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
+    let query = client.from("products").select("*").eq("status", "active").order("sku").limit(limit);
+    const search = options.query?.trim();
+    if (search) query = query.or(`sku.ilike.%${search}%,name.ilike.%${search}%`);
+    const { data, error } = await query;
+    throwRepositoryError("List active products", error);
+    return productRecordSchema.array().parse(data ?? []);
+  },
+
   async search(query: string, limit = 20) {
     const { data, error } = await client
       .from("products")

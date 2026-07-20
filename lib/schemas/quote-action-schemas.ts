@@ -80,6 +80,12 @@ export const selectFulfillmentActionSchema = z.object({
   })).min(1).optional(),
 });
 
+export const resolveQuoteLineSelectionActionSchema = z.discriminatedUnion("mode", [
+  z.object({ quote_id: uuidSchema, line_number: z.coerce.number().int().positive(), mode: z.literal("recommended"), actor_id: optionalUuidSchema, idempotency_key: z.string().trim().min(1).optional() }),
+  z.object({ quote_id: uuidSchema, line_number: z.coerce.number().int().positive(), mode: z.literal("catalogue"), product_id: uuidSchema, actor_id: optionalUuidSchema, idempotency_key: z.string().trim().min(1).optional() }),
+  z.object({ quote_id: uuidSchema, line_number: z.coerce.number().int().positive(), mode: z.literal("unavailable"), reason: z.string().trim().optional().nullable(), actor_id: optionalUuidSchema, idempotency_key: z.string().trim().min(1).optional() }),
+]);
+
 export const submitQuoteForApprovalActionSchema = z.object({
   quote_id: uuidSchema,
   actor_id: optionalUuidSchema,
@@ -130,6 +136,7 @@ export type CreateQuoteDraftActionInput = z.input<typeof createQuoteDraftActionS
 export type ExtractAndBuildQuoteActionInput = z.input<typeof extractAndBuildQuoteActionSchema>;
 export type ApplyRepCorrectionsActionInput = z.input<typeof applyRepCorrectionsActionSchema>;
 export type SelectFulfillmentActionInput = z.input<typeof selectFulfillmentActionSchema>;
+export type ResolveQuoteLineSelectionActionInput = z.input<typeof resolveQuoteLineSelectionActionSchema>;
 export type SubmitQuoteForApprovalActionInput = z.input<typeof submitQuoteForApprovalActionSchema>;
 export type GenerateQuoteActionInput = z.input<typeof generateQuoteActionSchema>;
 export type SendQuoteActionInput = z.input<typeof sendQuoteActionSchema>;

@@ -17,7 +17,7 @@ import type {
   InternalQuoteWorkspaceViewModel,
 } from "@/lib/services/quote-workspace-query-service";
 import {
-  FulfillmentButton,
+  LineResolutionControls,
   QuoteWorkflowActions,
 } from "@/components/quotes/quote-workspace-actions";
 import { ReviseQuoteForm } from "@/components/quotes/revise-quote-form";
@@ -198,7 +198,7 @@ function InventoryResolutionSection({
     <section aria-labelledby="inventory-resolution" className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h3 id="inventory-resolution" className="font-semibold">
-          Inventory Recommendations
+          Inventory Resolution
         </h3>
         <Badge className="bg-white text-slate-700">
           Inventory resolved: {quote.configuration.inventoryResolvedCount} of{" "}
@@ -232,9 +232,7 @@ function InventoryResolutionSection({
                 </div>
               </div>
               <Badge className="bg-white text-slate-700">
-                {line.inventoryApplied
-                  ? "Applied"
-                  : (text(recommendation.status) ?? "unresolved")}
+                {line.resolutionStatus === "unavailable" ? "Not available" : line.resolutionStatus === "selected" ? "Selected" : "Unresolved"}
               </Badge>
             </div>
             <div className="mt-3 text-sm">
@@ -257,15 +255,8 @@ function InventoryResolutionSection({
               ) : null}
             </div>
             <div className="mt-3 space-y-1">
-              <FulfillmentButton quote={quote} lineNumber={line.lineNumber} />
-              {line.inventoryApplied ? (
-                <>
-                  <p className="text-xs text-emerald-700">Product confirmed</p>
-                  <p className="text-xs text-emerald-700">
-                    Inventory confirmed
-                  </p>
-                </>
-              ) : null}
+              <LineResolutionControls quote={quote} lineNumber={line.lineNumber} />
+              {line.resolutionStatus === "unavailable" ? <p className="text-xs text-slate-600">Not available. This requested item will not be included in pricing or quote totals.</p> : line.inventoryApplied ? <> <p className="text-xs text-emerald-700">✓ {line.resolutionSource === "catalogue_selection" ? "Catalogue product selected" : "Recommended product selected"}</p><p className="text-xs text-emerald-700">✓ Inventory confirmed</p></> : line.inventoryBlocker ? <p className="text-xs text-red-700">{line.inventoryBlocker}</p> : null}
             </div>
           </div>
         );
@@ -354,6 +345,7 @@ function PricingResolutionTable({
           <TableHeader>
             <TableRow>
               <TableHead>Product</TableHead>
+              <TableHead>Selection source</TableHead>
               <TableHead>Pricing basis</TableHead>
               <TableHead className="text-right">Unit price</TableHead>
               <TableHead className="text-right">Qty</TableHead>
@@ -363,7 +355,7 @@ function PricingResolutionTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {quote.lines.map((line) => (
+            {quote.lines.filter((line) => line.quotable).map((line) => (
               <TableRow key={line.id}>
                 <TableCell>
                   <div>{lineTitle(line)}</div>
@@ -372,6 +364,7 @@ function PricingResolutionTable({
                     {fulfillment(line).map(fulfillmentLabel).join(", ")}
                   </div>
                 </TableCell>
+                <TableCell>{line.resolutionSource === "catalogue_selection" ? "Catalogue selection" : "Recommended"}</TableCell>
                 <TableCell>
                   <div>{priceTypeLabel(line.priceType)}</div>
                   <div className="text-xs text-slate-500">
@@ -398,6 +391,8 @@ function PricingResolutionTable({
           </TableBody>
         </Table>
       </div>
+      {quote.notIncludedLines.length > 0 ? <div className="rounded-lg bg-slate-50 p-3 text-sm"><strong>Items not quoted: {quote.notIncludedLines.length}</strong>{quote.notIncludedLines.map((line) => <p key={line.lineNumber}>{line.sku} — Not available</p>)}</div> : null}
+      {quote.configuration.unresolvedLineCount > 0 && quote.configuration.quotableLineCount > 0 ? <p className="text-sm text-amber-700">Partial pricing available. Resolve the remaining requested items before continuing.</p> : null}
     </section>
   );
 }
@@ -448,6 +443,7 @@ function QuoteSummaryCard({
         <p className="text-sm text-slate-600">{progress}</p>
       ) : (
         <>
+          {quote.notIncludedLines.length > 0 ? <section className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><strong>Partial quote</strong><p>{quote.notIncludedLines.length} of {quote.configuration.requestedLineCount} requested products is not available and is excluded from totals.</p></section> : null}
           <section className="space-y-2">
             <h3 className="font-semibold">Customer Quote</h3>
             <div className="flex justify-between text-sm">
@@ -522,6 +518,7 @@ function QuoteSummaryCard({
               <span>{percent(quote.commercialSummary.grossMarginBps)}</span>
             </div>
           </section>
+          {quote.notIncludedLines.length > 0 ? <section className="space-y-1 border-t pt-3 text-sm"><h3 className="font-semibold">Not included in quote</h3>{quote.notIncludedLines.map((line) => <div key={line.lineNumber}>{line.sku} — {line.description} · Qty {line.quantity}{line.reason ? ` · ${line.reason}` : ""}</div>)}</section> : null}
         </>
       )}
     </PrimaryCard>
