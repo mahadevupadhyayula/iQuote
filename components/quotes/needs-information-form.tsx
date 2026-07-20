@@ -69,7 +69,7 @@ export function NeedsInformationForm({ quote }: Props) {
 
   const submit = (intent: "continue" | "draft") => (formData: FormData) => {
     const fields: Record<string, string> = {};
-    const clarificationAnswers: Record<string, string> = {};
+    const clarificationAnswers: Record<string, string | number | boolean | null> = {};
     const productSelections: Record<string, { productId: string | null; sku?: string | null; description?: string | null; unresolved?: boolean }> = {};
     for (const [key, value] of formData.entries()) {
       const text = String(value);
