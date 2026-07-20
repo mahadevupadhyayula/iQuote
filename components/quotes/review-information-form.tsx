@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getReviewFieldDefinition, reviewFieldRegistry } from "@/lib/rules/review-field-registry";
+import { getReviewFieldDefinition } from "@/lib/rules/review-field-registry";
 import type { InternalQuoteWorkspaceViewModel } from "@/lib/services/quote-workspace-query-service";
 
 type Props = { quote: InternalQuoteWorkspaceViewModel };
