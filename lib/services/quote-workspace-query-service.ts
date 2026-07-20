@@ -1,17 +1,28 @@
 import "server-only";
 
 import { evaluateMarginFloor } from "@/lib/rules/margin-rules";
+import { normalizeProductMatchState } from "@/lib/rules/product-match-state";
 import { quoteConfigurationCompletion } from "@/lib/rules/quote-configuration-completion";
-import { evaluateQuoteReadiness, type QuoteReadinessEvaluation } from "@/lib/rules/readiness-rules";
+import {
+  evaluateQuoteReadiness,
+  type QuoteReadinessEvaluation,
+} from "@/lib/rules/readiness-rules";
 import type { ApprovalsRepository } from "@/lib/repositories/approvals";
 import type { CustomersRepository } from "@/lib/repositories/customers";
 import type { PricesRepository } from "@/lib/repositories/prices";
 import type { ProductsRepository } from "@/lib/repositories/products";
-import type { QuoteWithItems, QuotesRepository } from "@/lib/repositories/quotes";
+import type {
+  QuoteWithItems,
+  QuotesRepository,
+} from "@/lib/repositories/quotes";
 import type { WorkflowEventsRepository } from "@/lib/repositories/workflow-events";
 import { calculateQuote } from "@/lib/services/quote-calculation-service";
 import type { PricingBlocker } from "@/lib/services/quote-pricing-resolution-service";
-import type { ApprovalRecord, CustomerRecord, WorkflowEventRecord } from "@/lib/schemas/shared-records";
+import type {
+  ApprovalRecord,
+  CustomerRecord,
+  WorkflowEventRecord,
+} from "@/lib/schemas/shared-records";
 import type { BasisPoints, Cents } from "@/lib/utils/money";
 
 export type QuoteWorkspaceQueryRepositories = {
@@ -33,6 +44,9 @@ export type CustomerQuoteLineViewModel = {
   discountBps: BasisPoints;
   discountAmount: number;
   lineTotalAmount: number;
+  grossAmount: number;
+  discountPercentage: number;
+  netAmount: number;
 };
 
 export type CustomerQuoteViewModel = {
@@ -40,7 +54,16 @@ export type CustomerQuoteViewModel = {
   quoteNumber: string;
   status: QuoteWithItems["status"];
   currencyCode: string;
-  customer: Pick<CustomerRecord, "id" | "name" | "legal_name" | "billing_email" | "phone" | "billing_address" | "shipping_address"> | null;
+  customer: Pick<
+    CustomerRecord,
+    | "id"
+    | "name"
+    | "legal_name"
+    | "billing_email"
+    | "phone"
+    | "billing_address"
+    | "shipping_address"
+  > | null;
   subtotalAmount: number;
   discountAmount: number;
   taxAmount: number;
@@ -65,14 +88,34 @@ export type InternalQuoteLineViewModel = CustomerQuoteLineViewModel & {
   inventoryApplied: boolean;
   inventoryConfirmedAt: string | null;
   priceApplication: unknown;
+  priceId: string | null;
   priceType: string | null;
   priceSource: string | null;
+  priceSourceVersion: string | null;
+  priceAppliedAt: string | null;
   pricingResolved: boolean;
+  productMatchConfirmed: boolean;
+  productMatchMethod: string;
+  productMatchConfidence: number;
 };
 
-export type InternalApprovalViewModel = Pick<ApprovalRecord, "id" | "required_role" | "status" | "requested_by" | "approver_id" | "requested_at" | "decided_at" | "comments" | "metadata">;
+export type InternalApprovalViewModel = Pick<
+  ApprovalRecord,
+  | "id"
+  | "required_role"
+  | "status"
+  | "requested_by"
+  | "approver_id"
+  | "requested_at"
+  | "decided_at"
+  | "comments"
+  | "metadata"
+>;
 
-export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "lines"> & {
+export type InternalQuoteWorkspaceViewModel = Omit<
+  CustomerQuoteViewModel,
+  "lines"
+> & {
   opportunityId: string | null;
   submittedAt: string | null;
   approvedAt: string | null;
@@ -104,13 +147,28 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
   };
   workflowEvents: WorkflowEventRecord[];
   internalNotes: unknown;
+  commercialSummary: {
+    grossAmount: number;
+    discountAmount: number;
+    netAmount: number;
+    taxAmount: number;
+    totalPayable: number;
+    productCost: number;
+    grossProfit: number;
+    grossMarginBps: BasisPoints;
+  };
   configuration: {
     inventoryRequiredCount: number;
     inventoryResolvedCount: number;
     allInventorySelectionsApplied: boolean;
     allProductMatchesConfirmed: boolean;
     allInventoryConfirmed: boolean;
-    pricingStatus: "pending_inventory" | "pending_product_confirmation" | "not_started" | "resolved" | "blocked";
+    pricingStatus:
+      | "pending_inventory"
+      | "pending_product_confirmation"
+      | "not_started"
+      | "resolved"
+      | "blocked";
     pricingResolved: boolean;
     pricingBlockers: Array<PricingBlocker>;
     canContinue: boolean;
@@ -131,7 +189,11 @@ export type InternalQuoteWorkspaceViewModel = Omit<CustomerQuoteViewModel, "line
 
 const cents = (amount: number): Cents => Math.round(amount * 100) as Cents;
 const money = (amountCents: number) => Math.round(amountCents) / 100;
-const metadataNumber = (metadata: Record<string, unknown>, key: string, fallback = 0) => {
+const metadataNumber = (
+  metadata: Record<string, unknown>,
+  key: string,
+  fallback = 0,
+) => {
   const value = metadata[key];
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 };
@@ -139,27 +201,49 @@ const metadataString = (metadata: Record<string, unknown>, key: string) => {
   const value = metadata[key];
   return typeof value === "string" && value.length > 0 ? value : null;
 };
-const metadataObject = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
-const metadataStringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-const metadataArray = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
-const reviewMetadata = (metadata: Record<string, unknown>): InternalQuoteWorkspaceViewModel["reviewMetadata"] => {
+const metadataObject = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+const metadataStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+const metadataArray = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : [];
+const reviewMetadata = (
+  metadata: Record<string, unknown>,
+): InternalQuoteWorkspaceViewModel["reviewMetadata"] => {
   const extraction = metadataObject(metadata.extraction);
   const manualEntry = metadataObject(metadata.manual_entry);
   return {
     extraction,
-    extractionStatus: typeof extraction.status === "string" ? extraction.status : null,
+    extractionStatus:
+      typeof extraction.status === "string" ? extraction.status : null,
     extractionFields: metadataObject(extraction.fields),
     fieldConfidence: metadataObject(extraction.field_confidence),
     missingFields: metadataStringArray(extraction.missing_fields),
     clarificationQuestions: metadataArray(extraction.clarification_questions),
-    manualEntry: { enabled: manualEntry.enabled === true, reason: typeof manualEntry.reason === "string" ? manualEntry.reason : null },
+    manualEntry: {
+      enabled: manualEntry.enabled === true,
+      reason:
+        typeof manualEntry.reason === "string" ? manualEntry.reason : null,
+    },
     requirements: metadataObject(metadata.requirements),
     review: metadataObject(metadata.review),
-    originalRequestText: typeof extraction.original_request_text === "string" ? extraction.original_request_text : typeof extraction.source_text === "string" ? extraction.source_text : null,
+    originalRequestText:
+      typeof extraction.original_request_text === "string"
+        ? extraction.original_request_text
+        : typeof extraction.source_text === "string"
+          ? extraction.source_text
+          : null,
   };
 };
 
-const toCustomer = (quote: QuoteWithItems, customer: CustomerRecord | null): CustomerQuoteViewModel => ({
+const toCustomer = (
+  quote: QuoteWithItems,
+  customer: CustomerRecord | null,
+): CustomerQuoteViewModel => ({
   id: quote.id,
   quoteNumber: quote.quote_number,
   status: quote.status,
@@ -195,27 +279,79 @@ const toCustomer = (quote: QuoteWithItems, customer: CustomerRecord | null): Cus
       discountBps: item.discount_bps,
       discountAmount: item.discount_amount,
       lineTotalAmount: item.line_total_amount,
+      grossAmount: money(cents(item.unit_price) * item.quantity),
+      discountPercentage: item.discount_bps / 100,
+      netAmount: item.line_total_amount,
     })),
 });
 
-const approvalStatus = (approvals: ApprovalRecord[]): InternalQuoteWorkspaceViewModel["approvalStatus"] => {
-  const pendingCount = approvals.filter((approval) => approval.status === "pending").length;
-  const rejectedCount = approvals.filter((approval) => approval.status === "rejected").length;
-  const cancelledCount = approvals.filter((approval) => approval.status === "cancelled").length;
-  const approvedCount = approvals.filter((approval) => approval.status === "approved").length;
-  const status = pendingCount > 0 ? "pending" : rejectedCount > 0 ? "rejected" : cancelledCount > 0 ? "cancelled" : approvedCount > 0 ? "approved" : "not_required";
-  return { status, pendingCount, rejectedCount, requiredRoles: [...new Set(approvals.map((approval) => approval.required_role))], approvals };
+const approvalStatus = (
+  approvals: ApprovalRecord[],
+): InternalQuoteWorkspaceViewModel["approvalStatus"] => {
+  const pendingCount = approvals.filter(
+    (approval) => approval.status === "pending",
+  ).length;
+  const rejectedCount = approvals.filter(
+    (approval) => approval.status === "rejected",
+  ).length;
+  const cancelledCount = approvals.filter(
+    (approval) => approval.status === "cancelled",
+  ).length;
+  const approvedCount = approvals.filter(
+    (approval) => approval.status === "approved",
+  ).length;
+  const status =
+    pendingCount > 0
+      ? "pending"
+      : rejectedCount > 0
+        ? "rejected"
+        : cancelledCount > 0
+          ? "cancelled"
+          : approvedCount > 0
+            ? "approved"
+            : "not_required";
+  return {
+    status,
+    pendingCount,
+    rejectedCount,
+    requiredRoles: [
+      ...new Set(approvals.map((approval) => approval.required_role)),
+    ],
+    approvals,
+  };
 };
 
-const sla = (quote: QuoteWithItems, now: Date): InternalQuoteWorkspaceViewModel["sla"] => {
+const sla = (
+  quote: QuoteWithItems,
+  now: Date,
+): InternalQuoteWorkspaceViewModel["sla"] => {
   const slaMetadata = metadataObject(quote.metadata.sla);
-  const metadataStartedAt = metadataString(slaMetadata, "started_at") ?? metadataString(quote.metadata, "sla_started_at");
-  const metadataDueAt = metadataString(slaMetadata, "due_at") ?? metadataString(quote.metadata, "sla_due_at");
-  const policyMinutes = metadataNumber(slaMetadata, "policy_minutes", metadataNumber(quote.metadata, "sla_policy_minutes", Number.NaN));
+  const metadataStartedAt =
+    metadataString(slaMetadata, "started_at") ??
+    metadataString(quote.metadata, "sla_started_at");
+  const metadataDueAt =
+    metadataString(slaMetadata, "due_at") ??
+    metadataString(quote.metadata, "sla_due_at");
+  const policyMinutes = metadataNumber(
+    slaMetadata,
+    "policy_minutes",
+    metadataNumber(quote.metadata, "sla_policy_minutes", Number.NaN),
+  );
   const columnDueAt = quote.sla_due_at;
-  const source = metadataDueAt ? "metadata" : columnDueAt ? "column" : quote.valid_until ? "valid_until" : "none";
-  const effectiveDueAt = metadataDueAt ?? columnDueAt ?? (quote.valid_until ? `${quote.valid_until}T23:59:59.999Z` : null);
-  const minutesRemaining = effectiveDueAt ? Math.floor((new Date(effectiveDueAt).getTime() - now.getTime()) / 60_000) : null;
+  const source = metadataDueAt
+    ? "metadata"
+    : columnDueAt
+      ? "column"
+      : quote.valid_until
+        ? "valid_until"
+        : "none";
+  const effectiveDueAt =
+    metadataDueAt ??
+    columnDueAt ??
+    (quote.valid_until ? `${quote.valid_until}T23:59:59.999Z` : null);
+  const minutesRemaining = effectiveDueAt
+    ? Math.floor((new Date(effectiveDueAt).getTime() - now.getTime()) / 60_000)
+    : null;
   return {
     startedAt: metadataStartedAt,
     dueAt: effectiveDueAt,
@@ -226,25 +362,42 @@ const sla = (quote: QuoteWithItems, now: Date): InternalQuoteWorkspaceViewModel[
   };
 };
 
-export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQueryRepositories, now = () => new Date()) => ({
-  async getCustomerQuote(quoteId: string): Promise<CustomerQuoteViewModel | null> {
+export const createQuoteWorkspaceQueryService = (
+  repositories: QuoteWorkspaceQueryRepositories,
+  now = () => new Date(),
+) => ({
+  async getCustomerQuote(
+    quoteId: string,
+  ): Promise<CustomerQuoteViewModel | null> {
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) return null;
-    return toCustomer(quote, await repositories.customers.findById(quote.customer_id));
+    return toCustomer(
+      quote,
+      await repositories.customers.findById(quote.customer_id),
+    );
   },
 
-  async getInternalWorkspace(quoteId: string): Promise<InternalQuoteWorkspaceViewModel | null> {
+  async getInternalWorkspace(
+    quoteId: string,
+  ): Promise<InternalQuoteWorkspaceViewModel | null> {
     const quote = await repositories.quotes.findById(quoteId);
     if (!quote) return null;
 
-    const productIds = [...new Set(quote.items.map((item) => item.product_id).filter((id): id is string => Boolean(id)))];
-    const [customer, products, prices, approvals, workflowEvents] = await Promise.all([
-      repositories.customers.findById(quote.customer_id),
-      Promise.all(productIds.map((id) => repositories.products.findById(id))),
-      repositories.prices.listCurrentPrices(productIds, quote.currency_code),
-      repositories.approvals.listByQuote(quote.id),
-      repositories.workflowEvents.listByQuote(quote.id),
-    ]);
+    const productIds = [
+      ...new Set(
+        quote.items
+          .map((item) => item.product_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const [customer, products, prices, approvals, workflowEvents] =
+      await Promise.all([
+        repositories.customers.findById(quote.customer_id),
+        Promise.all(productIds.map((id) => repositories.products.findById(id))),
+        repositories.prices.listCurrentPrices(productIds, quote.currency_code),
+        repositories.approvals.listByQuote(quote.id),
+        repositories.workflowEvents.listByQuote(quote.id),
+      ]);
 
     const calculated = calculateQuote(
       quote.items.map((item) => ({
@@ -253,28 +406,80 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
         unitPriceCents: cents(item.unit_price),
         unitCostCents: cents(metadataNumber(item.metadata, "unit_cost")),
         discountBps: item.discount_bps,
-        marginFloorBps: metadataNumber(item.metadata, "margin_floor_bps", metadataNumber(quote.metadata, "margin_floor_bps")) as BasisPoints,
+        marginFloorBps: metadataNumber(
+          item.metadata,
+          "margin_floor_bps",
+          metadataNumber(quote.metadata, "margin_floor_bps"),
+        ) as BasisPoints,
       })),
     );
-    const floorBps = metadataNumber(quote.metadata, "margin_floor_bps") as BasisPoints;
-    const marginPolicy = evaluateMarginFloor({ sellPriceCents: calculated.sellPriceCents, costCents: calculated.costCents, floorBps });
-    const readiness = (quote.metadata.readiness as QuoteReadinessEvaluation | undefined) ?? evaluateQuoteReadiness({
-      customerId: quote.customer_id,
-      currencyCode: quote.currency_code,
-      lines: quote.items.map((item) => ({ productId: item.product_id, sku: item.sku, description: item.description, quantity: item.quantity })),
-      products: products.filter((product): product is NonNullable<typeof product> => Boolean(product)),
-      prices: prices.map((price) => ({ productId: price.product_id, unitPrice: price.unit_price, currencyCode: price.currency_code, effectiveFrom: price.effective_from, effectiveTo: price.effective_to })),
-      inventoryDecisions: quote.items.map((item) => item.metadata.inventory_decision).filter(Boolean) as never,
-      marginPolicy,
-      approvals: approvals.map((approval) => ({ requiredRole: approval.required_role, status: approval.status })),
-      paymentTerms: quote.metadata.payment_terms as never,
+    const floorBps = metadataNumber(
+      quote.metadata,
+      "margin_floor_bps",
+    ) as BasisPoints;
+    const marginPolicy = evaluateMarginFloor({
+      sellPriceCents: calculated.sellPriceCents,
+      costCents: calculated.costCents,
+      floorBps,
     });
-    const calculationsByLineId = new Map(calculated.lines.map((line) => [line.lineId, line]));
+    const readiness =
+      (quote.metadata.readiness as QuoteReadinessEvaluation | undefined) ??
+      evaluateQuoteReadiness({
+        customerId: quote.customer_id,
+        currencyCode: quote.currency_code,
+        lines: quote.items.map((item) => ({
+          productId: item.product_id,
+          sku: item.sku,
+          description: item.description,
+          quantity: item.quantity,
+        })),
+        products: products.filter(
+          (product): product is NonNullable<typeof product> => Boolean(product),
+        ),
+        prices: prices.map((price) => ({
+          productId: price.product_id,
+          unitPrice: price.unit_price,
+          currencyCode: price.currency_code,
+          effectiveFrom: price.effective_from,
+          effectiveTo: price.effective_to,
+        })),
+        inventoryDecisions: quote.items
+          .map((item) => item.metadata.inventory_decision)
+          .filter(Boolean) as never,
+        marginPolicy,
+        approvals: approvals.map((approval) => ({
+          requiredRole: approval.required_role,
+          status: approval.status,
+        })),
+        paymentTerms: quote.metadata.payment_terms as never,
+      });
+    const calculationsByLineId = new Map(
+      calculated.lines.map((line) => [line.lineId, line]),
+    );
     const customerView = toCustomer(quote, customer);
-    const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers) ? quote.metadata.pricing_blockers as PricingBlocker[] : [];
-    const { inventoryRequiredCount, inventoryResolvedCount, allInventorySelectionsApplied, allProductMatchesConfirmed, allInventoryConfirmed } = quoteConfigurationCompletion(quote.items);
-    const pricingResolved = quote.items.length > 0 && quote.items.every((item) => item.metadata.pricing_resolved === true);
-    const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] = pricingBlockers.length > 0 ? "blocked" : pricingResolved ? "resolved" : !allInventorySelectionsApplied ? "pending_inventory" : !allProductMatchesConfirmed ? "pending_product_confirmation" : "not_started";
+    const pricingBlockers = Array.isArray(quote.metadata.pricing_blockers)
+      ? (quote.metadata.pricing_blockers as PricingBlocker[])
+      : [];
+    const {
+      inventoryRequiredCount,
+      inventoryResolvedCount,
+      allInventorySelectionsApplied,
+      allProductMatchesConfirmed,
+      allInventoryConfirmed,
+    } = quoteConfigurationCompletion(quote.items);
+    const pricingResolved =
+      quote.items.length > 0 &&
+      quote.items.every((item) => item.metadata.pricing_resolved === true);
+    const pricingStatus: InternalQuoteWorkspaceViewModel["configuration"]["pricingStatus"] =
+      pricingBlockers.length > 0
+        ? "blocked"
+        : pricingResolved
+          ? "resolved"
+          : !allInventorySelectionsApplied
+            ? "pending_inventory"
+            : !allProductMatchesConfirmed
+              ? "pending_product_confirmation"
+              : "not_started";
 
     return {
       ...customerView,
@@ -286,7 +491,12 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
       lines: customerView.lines.map((line) => {
         const calculation = calculationsByLineId.get(line.id);
         const item = quote.items.find((candidate) => candidate.id === line.id);
-        const priceApplication = metadataObject(item?.metadata.price_application);
+        const metadata = item?.metadata ?? {};
+        const priceApplication = metadataObject(metadata.price_application);
+        const productMatch = normalizeProductMatchState(
+          metadata,
+          item?.product_id ?? null,
+        );
         return {
           ...line,
           productId: item?.product_id ?? null,
@@ -300,23 +510,64 @@ export const createQuoteWorkspaceQueryService = (repositories: QuoteWorkspaceQue
           inventoryRecommendation: item?.metadata.inventory_decision,
           selectedFulfillment: item?.metadata.selected_fulfillment,
           inventoryApplied: Array.isArray(item?.metadata.selected_fulfillment),
-          inventoryConfirmedAt: typeof item?.metadata.inventory_confirmed_at === "string" ? item.metadata.inventory_confirmed_at : null,
-          priceApplication: item?.metadata.price_application,
+          inventoryConfirmedAt:
+            typeof item?.metadata.inventory_confirmed_at === "string"
+              ? item.metadata.inventory_confirmed_at
+              : null,
+          priceApplication: metadata.price_application,
+          priceId: metadataString(priceApplication, "price_id"),
           priceType: metadataString(priceApplication, "price_type"),
           priceSource: metadataString(priceApplication, "source_name"),
-          pricingResolved: item?.metadata.pricing_resolved === true,
+          priceSourceVersion: metadataString(
+            priceApplication,
+            "source_version",
+          ),
+          priceAppliedAt: metadataString(priceApplication, "applied_at"),
+          pricingResolved: metadata.pricing_resolved === true,
+          productMatchConfirmed: productMatch.confirmed,
+          productMatchMethod: productMatch.method,
+          productMatchConfidence: productMatch.confidence,
         };
       }),
       readiness,
-      margin: { costAmount: money(calculated.costCents), grossProfitAmount: money(calculated.grossProfitCents), grossMarginBps: calculated.grossMarginBps, floorBps, floorPasses: marginPolicy.passes },
+      margin: {
+        costAmount: money(calculated.costCents),
+        grossProfitAmount: money(calculated.grossProfitCents),
+        grossMarginBps: calculated.grossMarginBps,
+        floorBps,
+        floorPasses: marginPolicy.passes,
+      },
+      commercialSummary: {
+        grossAmount: money(calculated.subtotalCents),
+        discountAmount: money(calculated.discountAmountCents),
+        netAmount: money(calculated.netTotalCents),
+        taxAmount: quote.tax_amount,
+        totalPayable: money(calculated.netTotalCents) + quote.tax_amount,
+        productCost: money(calculated.costCents),
+        grossProfit: money(calculated.grossProfitCents),
+        grossMarginBps: calculated.grossMarginBps,
+      },
       approvalStatus: approvalStatus(approvals),
       sla: sla(quote, now()),
       workflowEvents,
-      configuration: { inventoryRequiredCount, inventoryResolvedCount, allInventorySelectionsApplied, allProductMatchesConfirmed, allInventoryConfirmed, pricingStatus, pricingResolved, pricingBlockers, canContinue: readiness.ready && pricingResolved && pricingBlockers.length === 0 },
+      configuration: {
+        inventoryRequiredCount,
+        inventoryResolvedCount,
+        allInventorySelectionsApplied,
+        allProductMatchesConfirmed,
+        allInventoryConfirmed,
+        pricingStatus,
+        pricingResolved,
+        pricingBlockers,
+        canContinue:
+          readiness.ready && pricingResolved && pricingBlockers.length === 0,
+      },
       internalNotes: quote.metadata.internal_notes,
       reviewMetadata: reviewMetadata(quote.metadata),
     };
   },
 });
 
-export type QuoteWorkspaceQueryService = ReturnType<typeof createQuoteWorkspaceQueryService>;
+export type QuoteWorkspaceQueryService = ReturnType<
+  typeof createQuoteWorkspaceQueryService
+>;
