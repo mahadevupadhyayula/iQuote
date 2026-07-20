@@ -164,9 +164,25 @@ describe("intake seed examples", () => {
 
 describe("demo reset seed payloads", () => {
   it("uses warehouse_code, not location_code, in direct inventory seed payloads", async () => {
-    const source = await import("node:fs/promises").then((fs) => fs.readFile("lib/services/demo-reset-service.ts", "utf8"));
+    const fs = await import("node:fs/promises");
+    const source = await fs.readFile("lib/services/demo-reset-service.ts", "utf8");
     const inventorySection = source.slice(source.indexOf("const inventory = ["), source.indexOf("const discountPolicies"));
     expect(inventorySection).toContain("warehouse_code");
     expect(inventorySection).not.toContain("location_code");
+
+    const sqlSeed = await fs.readFile("supabase/seed.sql", "utf8");
+    const sqlInventorySection = sqlSeed.slice(sqlSeed.indexOf("insert into public.inventory"), sqlSeed.indexOf("insert into public.discount_policies"));
+    expect(sqlInventorySection).toContain("warehouse_code");
+    expect(sqlInventorySection).not.toContain("location_code");
+  });
+
+  it("keeps supabase seed.sql aligned with the AX-200 filter-kit demo path", async () => {
+    const sqlSeed = await import("node:fs/promises").then((fs) => fs.readFile("supabase/seed.sql", "utf8"));
+    expect(sqlSeed).toContain("AX-200-FKIT");
+    expect(sqlSeed).toContain("AX-200 compatible filter kit");
+    expect(sqlSeed).toContain("matching spare filters");
+    expect(sqlSeed).toContain("'40000000-0000-4000-8000-000000000211'");
+    expect(sqlSeed).toContain("'50000000-0000-4000-8000-000000000211'");
+    expect(sqlSeed).toContain('"approval_required_above_bps":800');
   });
 });
