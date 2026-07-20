@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 210 40% 99%;
+    --foreground: 224 47% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 47% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 47% 14%;
+    --primary: 218 92% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 58% 95%;
+    --secondary-foreground: 220 44% 22%;
+    --muted: 214 45% 96%;
+    --muted-foreground: 220 22% 45%;
+    --accent: 215 100% 96%;
+    --accent-foreground: 218 92% 40%;
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 86% 97%;
+    --success: 145 64% 34%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 145 65% 95%;
+    --warning: 36 92% 45%;
+    --warning-foreground: 36 100% 12%;
+    --warning-soft: 42 100% 95%;
+    --border: 216 34% 88%;
+    --input: 216 34% 88%;
+    --ring: 218 92% 58%;
+    --radius: 0.75rem;
+    --shadow-card: 0 1px 2px hsl(220 35% 20% / 0.06), 0 12px 32px -24px hsl(220 60% 20% / 0.24);
+    --shadow-enterprise: 0 10px 30px -18px hsl(220 60% 20% / 0.35);
+    --shadow-enterprise-lg: 0 24px 60px -28px hsl(220 60% 20% / 0.45);
+    --spacing-page: clamp(1rem, 2vw, 2rem);
+    --spacing-grid: 1rem;
+    --spacing-card: 1.25rem;
+    --spacing-control: 0.75rem;
+    --spacing-dense: 0.5rem;
+    --layout-workspace-max: 1440px;
+    --layout-document-max: 1120px;
+    --layout-sidebar: 20rem;
+    --badge-success: var(--success-soft);
+    --badge-success-foreground: var(--success);
+    --badge-success-border: 145 54% 82%;
+    --badge-warning: var(--warning-soft);
+    --badge-warning-foreground: var(--warning);
+    --badge-warning-border: 38 88% 82%;
+    --badge-destructive: var(--destructive-soft);
+    --badge-destructive-foreground: var(--destructive);
+    --badge-destructive-border: 0 74% 86%;
+    --badge-info: var(--accent);
+    --badge-info-foreground: var(--accent-foreground);
+    --badge-info-border: 215 92% 84%;
+    --badge-muted: var(--muted);
+    --badge-muted-foreground: var(--muted-foreground);
+    --badge-muted-border: var(--border);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 224 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 224 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 224 47% 10%;
+    --secondary: 222 38% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 38% 17%;
+    --muted-foreground: 215 20% 72%;
+    --accent: 220 46% 20%;
+    --accent-foreground: 212 100% 86%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-soft: 0 63% 18%;
+    --success: 145 63% 42%;
+    --success-foreground: 145 70% 8%;
+    --success-soft: 145 48% 16%;
+    --warning: 38 92% 52%;
+    --warning-foreground: 38 90% 10%;
+    --warning-soft: 38 64% 17%;
+    --border: 220 32% 22%;
+    --input: 220 32% 22%;
+    --ring: 217 91% 65%;
+    --shadow-card: 0 1px 2px hsl(220 60% 2% / 0.18), 0 12px 32px -24px hsl(220 60% 2% / 0.55);
+    --shadow-enterprise: 0 10px 30px -18px hsl(220 60% 2% / 0.65);
+    --shadow-enterprise-lg: 0 24px 60px -28px hsl(220 60% 2% / 0.75);
+    --badge-success-border: 145 40% 30%;
+    --badge-warning-border: 38 48% 32%;
+    --badge-destructive-border: 0 52% 34%;
+    --badge-info-border: 220 48% 34%;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    @apply bg-background text-foreground antialiased;
+  }
+}

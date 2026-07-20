@@ -1,0 +1,38 @@
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# TypeScript build output
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Local Supabase state
+supabase/.branches/
+supabase/.temp/
+supabase/snippets/
+
+# Generated PDF samples
+tmp/pdf-samples/
+
+# Temporary local backups
+*.local-backup
+
+# Dependencies and builds 
+node_modules/ 
+.next/ 
+tsconfig.tsbuildinfo
