@@ -12,7 +12,7 @@ const mockClient = (output: unknown): OpenAIResponsesClient =>
 
 describe("createQuoteExtractionAdapter", () => {
   it("extracts and validates structured quote facts from OpenAI Responses output", async () => {
-    const sourceText = "Atlas needs 4 HX-500 units by 2026-08-01. Contact buyer@atlas.example.";
+    const sourceText = "Atlas needs 4 HX-500 units by 2026-08-01 with an 8% discount and vendor startup support. Contact buyer@atlas.example.";
     const client = mockClient({
       output_text: JSON.stringify({
         source_text: sourceText,
@@ -29,10 +29,10 @@ describe("createQuoteExtractionAdapter", () => {
         ],
         delivery_location: { value: null, missing: true, confidence: 0, source_span: null },
         delivery_date: { value: "2026-08-01", missing: false, confidence: 0.95, source_span: null },
-        requested_discount: { value: null, missing: true, confidence: 0, source_span: null },
-        installation_requirement: { value: null, missing: true, confidence: 0, source_span: null },
+        requested_discount: { value: 8, missing: false, confidence: 0.9, source_span: null },
+        installation_requirement: { value: "vendor_installation_requested", missing: false, confidence: 0.9, source_span: null },
         special_requirements: { value: null, missing: true, confidence: 0, source_span: null },
-        missing_fields: ["opportunity_name", "requested_items[0].specifications", "delivery_location", "requested_discount", "installation_requirement", "special_requirements"],
+        missing_fields: ["opportunity_name", "requested_items[0].specifications", "delivery_location", "special_requirements"],
         ambiguities: [],
         clarification_questions: [],
         field_confidence: { customer_name: 0.9 },
@@ -45,8 +45,14 @@ describe("createQuoteExtractionAdapter", () => {
     await expect(adapter.extractQuoteRequest(sourceText)).resolves.toMatchObject({
       customer_name: { value: "Atlas", missing: false },
       requested_items: [{ requested_sku: { value: "HX-500", missing: false }, specifications: { value: null, missing: true } }],
+      requested_discount: { value: 8, missing: false },
+      installation_requirement: { value: "vendor_installation_requested", missing: false },
     });
     expect(client.responses.create).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-test" }));
+    const call = vi.mocked(client.responses.create).mock.calls[0]?.[0] as unknown as { text: { format: { schema: { properties: Record<string, { properties: { value: { anyOf: unknown[] } } }> } } } };
+    const properties = call.text.format.schema.properties;
+    expect(properties.requested_discount.properties.value.anyOf).toEqual([{ type: "number", minimum: 0, maximum: 100 }, { type: "null" }]);
+    expect(properties.installation_requirement.properties.value.anyOf).toEqual([{ type: "string", enum: ["vendor_installation_requested", "customer_installed", "not_required"] }, { type: "null" }]);
   });
 
   it("rejects invalid model output instead of accepting invented unsupported claims", async () => {

@@ -14,6 +14,7 @@ import {
   quoteStatusUnionSchema,
   workflowEventSchema,
 } from "@/lib/schemas";
+import { normalizeLegacyReviewValue, percentToBps } from "@/lib/rules/review-field-registry";
 
 const uuid = "11111111-1111-4111-8111-111111111111";
 const quoteUuid = "22222222-2222-4222-8222-222222222222";
@@ -174,10 +175,10 @@ describe("contract schemas", () => {
       ],
       delivery_location: { value: "Denver", missing: false, confidence: 0.8, source_span: null },
       delivery_date: { value: "2026-08-01", missing: false, confidence: 0.9, source_span: null },
-      requested_discount: nullString,
-      installation_requirement: nullString,
+      requested_discount: { value: 8, missing: false, confidence: 0.95, source_span: null },
+      installation_requirement: { value: "vendor_installation_requested", missing: false, confidence: 0.9, source_span: null },
       special_requirements: nullString,
-      missing_fields: ["opportunity_name", "requested_items[0].specifications", "requested_discount", "installation_requirement", "special_requirements"],
+      missing_fields: ["opportunity_name", "requested_items[0].specifications", "special_requirements"],
       ambiguities: [],
       clarification_questions: [{ field: "requested_discount", question: "Please provide any requested discount." }],
       field_confidence: { customer_name: 0.9, "requested_items[0].quantity": 0.95 },
@@ -188,6 +189,41 @@ describe("contract schemas", () => {
     expectInvalid(extractionOutputSchema, { ...valid, overall_confidence: 1.01 });
     expectInvalid(extractionOutputSchema, { ...valid, field_confidence: { customer_name: -0.1 } });
     expectInvalid(extractionOutputSchema, { ...valid, opportunity_name: { value: "Invented opportunity", missing: true, confidence: 0.4, source_span: null } });
+    expectInvalid(extractionOutputSchema, { ...valid, requested_discount: { value: "8%", missing: false, confidence: 0.95, source_span: null } });
+    expectInvalid(extractionOutputSchema, { ...valid, requested_discount: { value: 120, missing: false, confidence: 0.95, source_span: null } });
+    expectInvalid(extractionOutputSchema, { ...valid, installation_requirement: { value: "installation required", missing: false, confidence: 0.9, source_span: null } });
+    expectInvalid(extractionOutputSchema, { ...valid, installation_requirement: { value: "vendor_install", missing: false, confidence: 0.9, source_span: null } });
+  });
+
+  it("preserves discount and installation missing semantics", () => {
+    const nullString = { value: null, missing: true, confidence: 0, source_span: null };
+    const base = {
+      source_text: "Need 1 HX-500.",
+      customer_name: nullString,
+      opportunity_name: nullString,
+      requested_items: [{ line_number: 1, raw_item_description: { value: "1 HX-500", missing: false, confidence: 0.8, source_span: null }, requested_sku: { value: "HX-500", missing: false, confidence: 0.8, source_span: null }, quantity: { value: 1, missing: false, confidence: 0.8, source_span: null }, specifications: nullString }],
+      delivery_location: nullString,
+      delivery_date: nullString,
+      special_requirements: nullString,
+      missing_fields: [],
+      ambiguities: [],
+      clarification_questions: [],
+      field_confidence: {},
+      overall_confidence: 0.8,
+    };
+    expectValid(extractionOutputSchema, { ...base, requested_discount: { value: 0, missing: false, confidence: 0.9, source_span: null }, installation_requirement: nullString, missing_fields: ["installation_requirement"] });
+    expectValid(extractionOutputSchema, { ...base, requested_discount: { value: null, missing: true, confidence: 0, source_span: null }, installation_requirement: nullString, missing_fields: ["requested_discount", "installation_requirement"] });
+    expectValid(extractionOutputSchema, { ...base, requested_discount: { value: null, missing: true, confidence: 0, source_span: null }, installation_requirement: { value: "not_required", missing: false, confidence: 0.9, source_span: null }, missing_fields: ["requested_discount"] });
+    expectValid(extractionOutputSchema, { ...base, requested_discount: { value: null, missing: true, confidence: 0, source_span: null }, installation_requirement: { value: null, missing: true, confidence: 0.2, source_span: null }, missing_fields: ["requested_discount", "installation_requirement"], ambiguities: [{ field: "installation_requirement", description: "Installation ownership is ambiguous." }] });
+  });
+
+  it("normalizes legacy review values and converts reviewed percentages to basis points", () => {
+    expect(normalizeLegacyReviewValue("requested_discount", "8%")).toBe(8);
+    expect(normalizeLegacyReviewValue("requested_discount", "12.5 percent")).toBe(12.5);
+    expect(percentToBps(8)).toBe(800);
+    expect(percentToBps(12.5)).toBe(1250);
+    expect(normalizeLegacyReviewValue("installation_requirement", "Installation required")).toBe("vendor_installation_requested");
+    expect(normalizeLegacyReviewValue("installation_requirement", "vendor_install")).toBe("vendor_installation_requested");
   });
 
   it("validates quote status union values", () => {

@@ -204,6 +204,72 @@ const assertNoError = (label: string, error: { message: string } | null) => {
   }
 };
 
+export type DemoActivityResetResult = {
+  quotesDeleted: number;
+  quoteItemsDeleted: number;
+  approvalsDeleted: number;
+  workflowEventsDeleted: number;
+};
+
+const zeroActivityResetResult = (): DemoActivityResetResult => ({
+  quotesDeleted: 0,
+  quoteItemsDeleted: 0,
+  approvalsDeleted: 0,
+  workflowEventsDeleted: 0,
+});
+
+const countRowsForQuotes = async (
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  table: "quote_items" | "approvals" | "workflow_events",
+  label: string,
+  quoteIds: string[],
+) => {
+  const { error, count } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .in("quote_id", quoteIds);
+
+  assertNoError(label, error);
+
+  return count ?? 0;
+};
+
+export const clearDemoQuoteActivity = async (): Promise<DemoActivityResetResult> => {
+  const supabase: ReturnType<typeof createAdminSupabaseClient> = createAdminSupabaseClient();
+
+  const { data: quotes, error: quoteLookupError } = await supabase
+    .from("quotes")
+    .select("id");
+
+  assertNoError("Find quote activity", quoteLookupError);
+
+  const quoteIds = quotes?.map((quote: { id: string }) => quote.id) ?? [];
+
+  if (quoteIds.length === 0) {
+    return zeroActivityResetResult();
+  }
+
+  const [quoteItemsDeleted, approvalsDeleted, workflowEventsDeleted] = await Promise.all([
+    countRowsForQuotes(supabase, "quote_items", "Count quote items for activity reset", quoteIds),
+    countRowsForQuotes(supabase, "approvals", "Count approvals for activity reset", quoteIds),
+    countRowsForQuotes(supabase, "workflow_events", "Count workflow events for activity reset", quoteIds),
+  ]);
+
+  const { error: deleteError, count: quotesDeleted } = await supabase
+    .from("quotes")
+    .delete({ count: "exact" })
+    .in("id", quoteIds);
+
+  assertNoError("Clear demo quote activity", deleteError);
+
+  return {
+    quotesDeleted: quotesDeleted ?? quoteIds.length,
+    quoteItemsDeleted,
+    approvalsDeleted,
+    workflowEventsDeleted,
+  };
+};
+
 export const resetDemoData = async () => {
   const supabase: ReturnType<typeof createAdminSupabaseClient> = createAdminSupabaseClient();
   const productIds = demoProducts.map((product) => product.id);

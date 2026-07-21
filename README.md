@@ -47,7 +47,8 @@ Then update `.env.local`:
 - `SUPABASE_SERVICE_ROLE_KEY`: local service role key from `supabase start`.
 - `OPENAI_API_KEY`: your OpenAI API key for live extraction.
 - `OPENAI_MODEL`: required for live extraction and read only by server-side OpenAI configuration. The `.env.example` value is an operator-selected example default; verify the model is enabled for your OpenAI account before deployment.
-- `ENABLE_DEMO_RESET=true`: enables the demo reset API used by Playwright and local walkthroughs.
+- `ENABLE_DEMO_RESET=true`: enables the full fixture reseed API used by Playwright, local development recovery, and operator workflows.
+- `ENABLE_DEMO_ACTIVITY_RESET=true`: enables the user-facing activity reset button on `/quotes`; use only with an isolated demo database because it deletes quote activity.
 
 ## Run migrations and seed data
 
@@ -79,15 +80,23 @@ npm run dev
 
 Open <http://127.0.0.1:3000> and use the navigation to create or review quotes.
 
-## Reset the demo without resetting the database
+## Demo reset modes
 
-With the app running and `ENABLE_DEMO_RESET=true`, refresh only the seeded demo records:
+### Full fixture reset
+
+With the app running and `ENABLE_DEMO_RESET=true`, refresh the complete seeded fixture:
 
 ```bash
 npm run demo:reset
 ```
 
-This calls `POST /api/demo/reset`, which deletes and recreates the Atlas/Northstar demo customers, products, prices, inventory, and discount policies.
+This calls `POST /api/demo/reset`, which is used by Playwright and local development recovery. It deletes and recreates the Atlas/Northstar seeded reference data, including demo customers, products, product aliases, prices, inventory, discount policies, opportunities, quotes, quote items, approvals, and workflow events.
+
+### Activity reset
+
+With the app running and `ENABLE_DEMO_ACTIVITY_RESET=true`, the Recent Quotes page shows a **Reset demo** button. The button calls `POST /api/demo/clear-activity` after confirmation and clears quote activity only. It deletes quotes and relies on database cascades to remove related quote items, approval decisions, and workflow events. Customers, opportunities, products, product aliases, prices, inventory, and discount policies are preserved for the next demo.
+
+Only enable activity reset against an isolated demo database. It is intentionally separate from the full fixture reset and never performs schema, migration, Supabase CLI, storage, or database-wide reset operations.
 
 ## PDF rendering
 

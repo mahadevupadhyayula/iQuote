@@ -19,8 +19,8 @@ const product: ProductRecord = {
   updated_at: now,
 };
 
-const extraction = (requestedDiscount: string | null): ExtractionOutput => ({
-  source_text: requestedDiscount ? `Need 4 HX-500. ${requestedDiscount}` : "Need 4 HX-500.",
+const extraction = (requestedDiscount: number | null): ExtractionOutput => ({
+  source_text: requestedDiscount !== null ? `Need 4 HX-500. ${requestedDiscount}%` : "Need 4 HX-500.",
   customer_name: field("Atlas"),
   opportunity_name: field(null),
   requested_items: [
@@ -61,12 +61,13 @@ const line = (quantity: number | null): IntakeLinePersistenceInput => ({
 });
 
 describe("intake requirements persistence rules", () => {
-  it("stores unsupported discount text as customer request metadata without applying discount basis points", () => {
-    const metadata = toIntakeRequirementsMetadata(extraction("give us your impossible partner moonshot discount"), [line(4)]);
+  it("stores canonical numeric discount percentage as customer request metadata without applying line discounts", () => {
+    const metadata = toIntakeRequirementsMetadata(extraction(8), [line(4)]);
     const items = toReviewRequiredQuoteItems([line(4)]);
 
     expect(metadata.customer_request.requested_discount).toMatchObject({
-      text: "give us your impossible partner moonshot discount",
+      value: 8,
+      unit: "percent",
       status: "customer_requested_review_required",
     });
     expect(JSON.stringify(metadata.customer_request.requested_discount)).not.toContain("discount_bps");
@@ -75,12 +76,13 @@ describe("intake requirements persistence rules", () => {
     expect(items[0].metadata).toMatchObject({ review_required: true, discount_status: "not_applied" });
   });
 
-  it("stores invalid discount text for review and does not create quantity placeholders when quantity was not explicit", () => {
-    const metadata = toIntakeRequirementsMetadata(extraction("discount: ten-ish percent maybe??"), [line(null)]);
+  it("stores zero discount distinctly and does not create quantity placeholders when quantity was not explicit", () => {
+    const metadata = toIntakeRequirementsMetadata(extraction(0), [line(null)]);
     const items = toReviewRequiredQuoteItems([line(null)]);
 
     expect(metadata.customer_request.requested_discount).toMatchObject({
-      text: "discount: ten-ish percent maybe??",
+      value: 0,
+      unit: "percent",
       status: "customer_requested_review_required",
     });
     expect(metadata.requirements.requested_items[0]).toMatchObject({ quantity: null, review_required: true });

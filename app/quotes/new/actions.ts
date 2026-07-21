@@ -54,10 +54,7 @@ const toSuggestions = (missingFields: string[], clarificationQuestions: Clarific
 
 const optionalString = (value: string | undefined) => (value && value.length > 0 ? value : null);
 
-const requestedDiscountBps = (value: string | null) => {
-  const match = value?.match(/(\d+(?:\.\d+)?)\s*%/);
-  return match ? Math.round(Number(match[1]) * 100) : 0;
-};
+const requestedDiscountBps = (value: number | null) => value == null ? 0 : Math.round(value * 100);
 
 const buildSla = (now = new Date()) => {
   const due = new Date(now.getTime() + intakeSlaMinutes * 60 * 1000);

@@ -11,13 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getReviewFieldDefinition } from "@/lib/rules/review-field-registry";
+import { getReviewFieldDefinition, normalizeLegacyReviewValue } from "@/lib/rules/review-field-registry";
 import type { InternalQuoteWorkspaceViewModel } from "@/lib/services/quote-workspace-query-service";
 
 type Props = { quote: InternalQuoteWorkspaceViewModel };
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const asArray = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
-const fieldValue = (field: unknown) => { const value = asRecord(field).value; return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; };
+const fieldValue = (path: string, field: unknown) => { const value = normalizeLegacyReviewValue(path, asRecord(field).value); return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : ""; };
 const fieldMeta = (quote: InternalQuoteWorkspaceViewModel, path: string) => {
   const extraction = asRecord(quote.reviewMetadata.extraction);
   const fields = asRecord(quote.reviewMetadata.extractionFields);
@@ -31,8 +31,8 @@ const existingValue = (quote: InternalQuoteWorkspaceViewModel, path: string) => 
   const fields = asRecord(quote.reviewMetadata.extractionFields);
   const def = getReviewFieldDefinition(path);
   if (path === "currency") return quote.currencyCode;
-  if (def?.itemIndex != null) return fieldValue(asArray(fields.requested_items)[def.itemIndex]?.[path.split(".").at(-1) ?? ""]);
-  return fieldValue(fields[path]);
+  if (def?.itemIndex != null) return fieldValue(path, asArray(fields.requested_items)[def.itemIndex]?.[path.split(".").at(-1) ?? ""]);
+  return fieldValue(path, fields[path]);
 };
 function StatusIndicators({ quote, path }: { quote: InternalQuoteWorkspaceViewModel; path: string }) {
   const def = getReviewFieldDefinition(path);
@@ -45,7 +45,7 @@ function Field({ quote, path, name }: { quote: InternalQuoteWorkspaceViewModel; 
   const value = existingValue(quote, path);
   const meta = fieldMeta(quote, path);
   const inputName = name ?? `field:${path}`;
-  return <label className="space-y-2 text-sm font-medium">{def.label}<StatusIndicators quote={quote} path={path} />{def.control === "textarea" ? <Textarea name={inputName} defaultValue={value} placeholder={def.helpText} /> : def.control === "select" ? <Select name={inputName} defaultValue={value || String(def.defaultValue ?? "not_required")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{def.options?.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select> : <Input name={inputName} type={def.control === "number" || def.control === "percentage" ? "number" : def.control === "date" ? "date" : "text"} defaultValue={value} min={def.minimum} max={def.maximum} step={def.step} placeholder={def.helpText} />}{def.helpText ? <p className="text-xs text-slate-500">{def.helpText}</p> : null}{meta.ambiguity ? <p className="text-xs text-amber-700">Ambiguity: {String(asRecord(meta.ambiguity).explanation ?? asRecord(meta.ambiguity).reason ?? "Review this value.")}</p> : null}</label>;
+  return <label className="space-y-2 text-sm font-medium">{def.label}<StatusIndicators quote={quote} path={path} />{def.control === "textarea" ? <Textarea name={inputName} defaultValue={value} placeholder={def.helpText} /> : def.control === "select" ? <Select name={inputName} defaultValue={value || undefined}><SelectTrigger><SelectValue placeholder={def.helpText ?? "Select"} /></SelectTrigger><SelectContent>{def.options?.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select> : <Input name={inputName} type={def.control === "number" || def.control === "percentage" ? "number" : def.control === "date" ? "date" : "text"} defaultValue={value} min={def.minimum} max={def.maximum} step={def.step} placeholder={def.helpText} />}{def.helpText ? <p className="text-xs text-slate-500">{def.helpText}</p> : null}{meta.ambiguity ? <p className="text-xs text-amber-700">Ambiguity: {String(asRecord(meta.ambiguity).explanation ?? asRecord(meta.ambiguity).reason ?? "Review this value.")}</p> : null}</label>;
 }
 export function ReviewInformationForm({ quote }: Props) {
   const initialCount = Math.max(1, asArray(asRecord(quote.reviewMetadata.extractionFields).requested_items).length, quote.lines.length);

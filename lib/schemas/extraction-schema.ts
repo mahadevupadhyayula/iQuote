@@ -23,6 +23,13 @@ const extractedFieldSchema = <T extends z.ZodTypeAny>(valueSchema: T, label: str
 
 export const extractedStringFieldSchema = extractedFieldSchema(z.string().min(1), "string");
 export const extractedNumberFieldSchema = extractedFieldSchema(z.number(), "number");
+export const extractedRequestedDiscountFieldSchema = extractedFieldSchema(z.number().min(0).max(100), "requested discount");
+export const installationRequirementSchema = z.enum([
+  "vendor_installation_requested",
+  "customer_installed",
+  "not_required",
+]);
+export const extractedInstallationRequirementFieldSchema = extractedFieldSchema(installationRequirementSchema, "installation requirement");
 export const extractedDateFieldSchema = extractedFieldSchema(dateSchema, "date");
 
 export const extractedRequestedItemSchema = z
@@ -61,8 +68,8 @@ export const extractionOutputSchema = z
     requested_items: z.array(extractedRequestedItemSchema).min(1),
     delivery_location: extractedStringFieldSchema,
     delivery_date: extractedDateFieldSchema,
-    requested_discount: extractedStringFieldSchema,
-    installation_requirement: extractedStringFieldSchema,
+    requested_discount: extractedRequestedDiscountFieldSchema,
+    installation_requirement: extractedInstallationRequirementFieldSchema,
     special_requirements: extractedStringFieldSchema,
     missing_fields: z.array(z.string().min(1)).default([]),
     ambiguities: z.array(ambiguitySchema).default([]),
@@ -88,6 +95,9 @@ export const extractionOutputSchema = z
 export type ExtractedSourceSpan = z.infer<typeof sourceSpanSchema>;
 export type ExtractedStringField = z.infer<typeof extractedStringFieldSchema>;
 export type ExtractedNumberField = z.infer<typeof extractedNumberFieldSchema>;
+export type ExtractedRequestedDiscountField = z.infer<typeof extractedRequestedDiscountFieldSchema>;
+export type InstallationRequirement = z.infer<typeof installationRequirementSchema>;
+export type ExtractedInstallationRequirementField = z.infer<typeof extractedInstallationRequirementFieldSchema>;
 export type ExtractedDateField = z.infer<typeof extractedDateFieldSchema>;
 export type ExtractedRequestedItem = z.infer<typeof extractedRequestedItemSchema>;
 export type ExtractionOutput = z.infer<typeof extractionOutputSchema>;

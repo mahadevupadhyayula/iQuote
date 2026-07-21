@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { installationRequirementSchema } from "@/lib/schemas/extraction-schema";
+
 export type ReviewFieldDefinition = {
   key: string;
   label: string;
@@ -16,11 +18,14 @@ export type ReviewFieldDefinition = {
   helpText?: string;
 };
 
-export const installationRequirementOptions = [
-  { value: "vendor_installation_requested", label: "Vendor installation or startup support required" },
-  { value: "customer_installed", label: "Installation will be handled internally" },
-  { value: "not_required", label: "No installation or startup support required" },
-];
+export const installationRequirementOptions = installationRequirementSchema.options.map((value) => ({
+  value,
+  label: value === "vendor_installation_requested"
+    ? "Vendor installation or startup support required"
+    : value === "customer_installed"
+      ? "Installation will be handled internally"
+      : "No installation or startup support required",
+}));
 
 export const reviewFieldRegistry = {
   customer_name: { key: "customer_name", label: "Customer", control: "text", requiredForConfiguration: true, defaultStrategy: "none" },
@@ -58,3 +63,27 @@ export const reviewInformationSchema = z.object({
 export type ReviewInformationInput = z.input<typeof reviewInformationSchema>;
 export const isBlankReviewValue = (value: unknown) => value == null || (typeof value === "string" && value.trim().length === 0);
 export const percentToBps = (value: number) => Math.round(value * 100);
+
+export const normalizeLegacyReviewValue = (path: string, value: unknown): string | number | boolean | null => {
+  if (value == null || value === "") return null;
+  if (path === "requested_discount") {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
+      const match = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/i);
+      return match ? Number(match[1]) : null;
+    }
+  }
+  if (path === "installation_requirement") {
+    if (installationRequirementSchema.safeParse(value).success) return value as string;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (/vendor|supplier|manufacturer|commission|startup|start-up|installation required|required installation/.test(normalized)) return "vendor_installation_requested";
+      if (/customer|client|internal|in-house|in house|self|buyer/.test(normalized)) return "customer_installed";
+      if (/not required|no installation|no commissioning|no startup|none|required: no|not needed/.test(normalized)) return "not_required";
+    }
+    return null;
+  }
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : null;
+};
