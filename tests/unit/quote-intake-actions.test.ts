@@ -35,7 +35,7 @@ const completeExtraction = (overrides: Record<string, unknown> = {}) => ({
   delivery_location: { value: "Dallas", missing: false, confidence: 0.9, source_span: null },
   delivery_date: { value: "2026-09-15", missing: false, confidence: 0.9, source_span: null },
   requested_discount: { value: null, missing: true, confidence: 0, source_span: null },
-  installation_requirement: { value: "not required", missing: false, confidence: 0.8, source_span: null },
+  installation_requirement: { value: "not_required", missing: false, confidence: 0.8, source_span: null },
   special_requirements: { value: "none", missing: false, confidence: 0.8, source_span: null },
   missing_fields: [],
   ambiguities: [],
@@ -117,7 +117,7 @@ describe("submitQuoteIntake", () => {
     state.extractionError = null;
     state.extractionOutput = completeExtraction({
       source_text: "Atlas needs 2 AX-200 delivered to Dallas by 2026-09-15, but installation ownership is unclear.",
-      installation_requirement: { value: "installation ownership unclear", missing: false, confidence: 0.35, source_span: null },
+      installation_requirement: { value: null, missing: true, confidence: 0.35, source_span: null },
       ambiguities: [{ field: "installation_requirement", description: "Customer text does not confirm whether Atlas or the vendor owns installation." }],
       clarification_questions: [{ field: "installation_requirement", question: "Should Atlas install internally, or should vendor installation be included?" }],
       overall_confidence: 0.72,

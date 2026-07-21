@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { createRepositories } from "@/lib/repositories";
 import type { QuoteItemCreateInput, QuoteWithItems } from "@/lib/repositories/quotes";
-import { getReviewFieldDefinition, isBlankReviewValue, percentToBps, reviewInformationSchema, type ReviewInformationInput } from "@/lib/rules/review-field-registry";
+import { getReviewFieldDefinition, isBlankReviewValue, normalizeLegacyReviewValue, percentToBps, reviewInformationSchema, type ReviewInformationInput } from "@/lib/rules/review-field-registry";
+import { installationRequirementSchema } from "@/lib/schemas/extraction-schema";
 import { createWorkflowService } from "@/lib/services/workflow-service";
 
 type ActionResult = { ok: true; quoteId: string; status: string } | { ok: false; fieldErrors: Record<string, string>; formError?: string };
@@ -22,10 +23,10 @@ const reviewed = (value: unknown, source: Source, original: unknown, confidence:
 const extractedValue = (quote: QuoteWithItems, path: string) => {
   const fields = asObject(asObject(quote.metadata.extraction).fields);
   const def = getReviewFieldDefinition(path);
-  if (def?.itemIndex != null) return primitive(asArray(fields.requested_items)[def.itemIndex]?.[path.split(".").at(-1) ?? ""]);
+  if (def?.itemIndex != null) return normalizeLegacyReviewValue(path, primitive(asArray(fields.requested_items)[def.itemIndex]?.[path.split(".").at(-1) ?? ""]));
   if (path === "currency") return quote.currency_code;
-  if (path === "customer_name") return primitive(fields.customer_name);
-  return primitive(fields[path]);
+  if (path === "customer_name") return normalizeLegacyReviewValue(path, primitive(fields.customer_name));
+  return normalizeLegacyReviewValue(path, primitive(fields[path]));
 };
 
 const resolveField = async (quote: QuoteWithItems, path: string, raw: unknown, repositories: ReturnType<typeof createRepositories>) => {
@@ -33,7 +34,10 @@ const resolveField = async (quote: QuoteWithItems, path: string, raw: unknown, r
   const original = extractedValue(quote, path);
   const extraction = asObject(quote.metadata.extraction);
   const confidence = asObject(extraction.field_confidence)[path];
-  if (!isBlankReviewValue(raw)) return { value: def?.control === "number" || def?.control === "percentage" ? num(raw) : text(raw) ?? raw, source: (String(raw) === String(original) ? "extracted" : "user_edited") as Source, original, confidence };
+  if (!isBlankReviewValue(raw)) {
+    const value = normalizeLegacyReviewValue(path, def?.control === "number" || def?.control === "percentage" ? num(raw) : text(raw) ?? raw);
+    return { value, source: (String(value) === String(original) ? "extracted" : "user_edited") as Source, original, confidence };
+  }
   if (path === "requested_discount") return { value: 0, source: "system_default" as Source, original, confidence };
   if (path === "installation_requirement") return { value: "not_required", source: "system_default" as Source, original, confidence };
   if (path.endsWith(".specifications")) return { value: { mode: "standard_catalog", text: null, source: "system_default" }, source: "system_default" as Source, original, confidence };
@@ -87,6 +91,8 @@ export async function saveReviewInformation(input: ReviewInformationInput): Prom
   if (Object.keys(errors).length) return { ok: false, fieldErrors: errors };
   const discountPercent = num(resolved.requested_discount?.value) ?? 0;
   if (discountPercent < 0 || discountPercent > 100) return { ok: false, fieldErrors: { requested_discount: "Requested discount must be between 0 and 100 percent." } };
+  const installationRequirement = resolved.installation_requirement?.value;
+  if (installationRequirement != null && !installationRequirementSchema.safeParse(installationRequirement).success) return { ok: false, fieldErrors: { installation_requirement: "Select a valid installation requirement." } };
   const discountBps = percentToBps(discountPercent);
   const reviewedFields = Object.fromEntries(Object.entries(resolved).map(([path, r]) => [path, reviewed(r.value, r.source, r.original, r.confidence, reviewedAt)]));
   const requestedItems = itemIndexes.map((i) => ({ description: text(resolved[`requested_items[${i}].raw_item_description`]?.value), requested_sku: text(resolved[`requested_items[${i}].requested_sku`]?.value), quantity: num(resolved[`requested_items[${i}].quantity`]?.value), specifications: resolved[`requested_items[${i}].specifications`]?.value }));

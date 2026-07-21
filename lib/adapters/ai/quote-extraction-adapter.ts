@@ -30,7 +30,7 @@ const buildFallbackExtraction = (sourceText: string): ExtractionOutput => ({
   ],
   delivery_location: nullableString(),
   delivery_date: nullableString(),
-  requested_discount: nullableString(),
+  requested_discount: nullableNumber(),
   installation_requirement: nullableString(),
   special_requirements: nullableString(),
   missing_fields: [
@@ -93,8 +93,8 @@ const extractionJsonSchema = {
     },
     delivery_location: extractedStringJsonSchema(),
     delivery_date: extractedDateJsonSchema(),
-    requested_discount: extractedStringJsonSchema(),
-    installation_requirement: extractedStringJsonSchema(),
+    requested_discount: extractedRequestedDiscountJsonSchema(),
+    installation_requirement: extractedInstallationRequirementJsonSchema(),
     special_requirements: extractedStringJsonSchema(),
     missing_fields: { type: "array", items: { type: "string", minLength: 1 }, default: [] },
     ambiguities: {
@@ -150,6 +150,14 @@ function extractedStringJsonSchema() {
 
 function extractedNumberJsonSchema() {
   return extractedFieldJsonSchema({ anyOf: [{ type: "number" }, { type: "null" }] });
+}
+
+function extractedRequestedDiscountJsonSchema() {
+  return extractedFieldJsonSchema({ anyOf: [{ type: "number", minimum: 0, maximum: 100 }, { type: "null" }] });
+}
+
+function extractedInstallationRequirementJsonSchema() {
+  return extractedFieldJsonSchema({ anyOf: [{ type: "string", enum: ["vendor_installation_requested", "customer_installed", "not_required"] }, { type: "null" }] });
 }
 
 function extractedDateJsonSchema() {
@@ -237,7 +245,13 @@ export const createQuoteExtractionAdapter = (options: QuoteExtractionAdapterOpti
                     "Extract Phase 3 quote-request facts only when they are explicitly present in the supplied source text.",
                     "Use null with missing=true for every absent fact; never fill absent values with guesses or placeholders.",
                     "Do not invent SKUs. Capture requested_sku only when the source text supplies the SKU or part number.",
-                    "Do not retrieve, infer, calculate, or assert price, discounts beyond the customer's requested discount text, inventory, approval status, quote totals, margin, workflow state, or any other commercial truth.",
+                    "Do not retrieve, infer, calculate, or assert price, inventory, approval status, quote totals, margin, workflow state, or any other commercial truth.",
+                    "Return requested_discount as a numeric percentage without the percent symbol. For example, 8% must be returned as 8 and 12.5% as 12.5. Use 0 with missing=false only when the customer explicitly requests no discount; use null with missing=true when discount information is absent.",
+                    "Return installation_requirement as exactly one of vendor_installation_requested, customer_installed, not_required, or null with missing=true.",
+                    "Use vendor_installation_requested only when the customer explicitly requests vendor, supplier, manufacturer, commissioning, installation, or startup support.",
+                    "Use customer_installed only when the request explicitly says the customer, client, internal team, in-house team, or buyer will handle installation.",
+                    "Use not_required only when the request explicitly says installation, commissioning, or startup support is not required.",
+                    "When installation is absent or ambiguous, return null with missing=true and create an ambiguity or clarification question where appropriate.",
                     "Mark uncertain information explicitly by lowering confidence and adding an ambiguity or clarification question when appropriate.",
                     "Include source spans only when directly supported by the source text; use confidence 0 and source_span null for missing fields.",
                     "Return only the supplied schema fields and no extra fields.",
