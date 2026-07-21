@@ -22,9 +22,10 @@ export type IntakeLinePersistenceInput = {
 export const toIntakeRequirementsMetadata = (extraction: ExtractionOutput, lines: IntakeLinePersistenceInput[]) => ({
   customer_request: {
     source_text: extraction.source_text,
-    requested_discount: extraction.requested_discount.value
+    requested_discount: extraction.requested_discount.value !== null
       ? {
-          text: extraction.requested_discount.value,
+          value: extraction.requested_discount.value,
+          unit: "percent",
           confidence: extraction.requested_discount.confidence,
           source_span: extraction.requested_discount.source_span,
           status: "customer_requested_review_required",

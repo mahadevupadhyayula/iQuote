@@ -2,12 +2,18 @@ export {
   extractedDateFieldSchema,
   extractedNumberFieldSchema,
   extractedRequestedItemSchema,
+  extractedRequestedDiscountFieldSchema,
   extractedStringFieldSchema,
+  extractedInstallationRequirementFieldSchema,
+  installationRequirementSchema,
   extractionOutputSchema,
 } from "./extraction-schema";
 export type {
   ExtractedDateField,
   ExtractedNumberField,
+  ExtractedRequestedDiscountField,
+  InstallationRequirement,
+  ExtractedInstallationRequirementField,
   ExtractedRequestedItem,
   ExtractedSourceSpan,
   ExtractedStringField,

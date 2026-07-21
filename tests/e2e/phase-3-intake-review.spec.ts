@@ -48,4 +48,28 @@ test.describe("phase 3 intake and review workspace", () => {
     await expect(page.getByText("configuring")).toBeVisible();
     await expect(page.getByText("Quote Configuration")).toBeVisible();
   });
+
+  test("prepopulates canonical discount and installation fields during review", async ({ page, request }) => {
+    const resetResponse = await request.post("/api/demo/reset");
+    expect(resetResponse.ok(), await resetResponse.text()).toBeTruthy();
+
+    await page.goto("/quotes/new");
+    await page.getByRole("combobox").first().click();
+    await page.getByRole("option", { name: "Standard quote — ready for review" }).click();
+    await expect(page.getByLabel("Customer request")).toContainText("No additional discount is requested");
+    await expect(page.getByLabel("Customer request")).toContainText("Include standard vendor installation");
+
+    await page.getByRole("button", { name: /extract and build quote/i }).click();
+    await expect(page).toHaveURL(/\/quotes\/[^/]+\/review$/, { timeout: 30_000 });
+
+    await expect(page.getByLabel("Requested discount")).toHaveValue("0");
+    await expect(page.getByText("Vendor installation or startup support required")).toBeVisible();
+
+    await page.getByRole("button", { name: /^save draft$/i }).click();
+    await expect(page.getByRole("button", { name: /^save draft$/i })).toBeEnabled({ timeout: 15_000 });
+    await page.reload();
+    await expect(page.getByLabel("Requested discount")).toHaveValue("0");
+    await expect(page.getByText("Vendor installation or startup support required")).toBeVisible();
+  });
+
 });
