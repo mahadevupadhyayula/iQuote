@@ -11,14 +11,18 @@ export interface WorkspaceLayoutProps {
   contentClassName?: string;
   currentStep?: WorkflowStepId;
   status?: QuoteStatus;
+  dashboardAction?: ReactNode;
 }
 
-export function WorkspaceLayout({ children, className, contentClassName, currentStep, status }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ children, className, contentClassName, currentStep, status, dashboardAction }: WorkspaceLayoutProps) {
   return (
     <div className={cn('min-h-screen bg-slate-50 text-slate-950', className)}>
       <AppHeader />
       <WorkflowStepper currentStep={currentStep} status={status} />
-      <main className={cn('mx-auto w-full max-w-[1440px] px-6 py-6 lg:px-7', contentClassName)}>{children}</main>
+      <main className={cn('mx-auto w-full max-w-[1440px] px-6 py-6 lg:px-7', contentClassName)}>
+        {dashboardAction ? <div className="mb-4 flex justify-end">{dashboardAction}</div> : null}
+        {children}
+      </main>
     </div>
   );
 }

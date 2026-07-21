@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Clock3, XCircle } from "lucide-react";
 
+import { DashboardButton } from "@/components/app-shell/dashboard-button";
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +28,7 @@ export default async function QuoteStatusRouterPage({
   const Icon = isExtracting ? Clock3 : XCircle;
 
   return (
-    <WorkspaceLayout status={quote.status} contentClassName="max-w-3xl space-y-6">
+    <WorkspaceLayout status={quote.status} contentClassName="max-w-3xl space-y-6" dashboardAction={<DashboardButton mode="navigate" />}>
       <header className="space-y-2">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">
           Intelligent Quote Workspace

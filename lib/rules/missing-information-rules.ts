@@ -62,7 +62,7 @@ const valueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const completeMissingInformationSchema = z.object({
   quoteId: z.string().uuid().or(z.string().min(1)),
-  intent: z.enum(["continue", "draft"]).default("continue"),
+  intent: z.enum(["continue", "draft", "dashboard"]).default("continue"),
   fields: z.record(pathSchema, valueSchema).default({}),
   clarificationAnswers: z.record(z.string(), valueSchema).default({}),
   productSelections: z.record(z.string(), z.object({
