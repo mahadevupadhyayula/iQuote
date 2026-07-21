@@ -107,7 +107,8 @@ export function QuoteWorkflowActions({ quote }: Props) {
       setError(null);
       try {
         await action();
-        router.refresh();
+        if (name === "dashboard") router.push("/quotes");
+        else router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : `Unable to ${name}.`);
       } finally {
@@ -116,5 +117,5 @@ export function QuoteWorkflowActions({ quote }: Props) {
     });
   };
   const reasons = uniqueFirstThree(disabledReasons(quote));
-  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reasons.length > 0 ? <div className="space-y-1 text-right text-sm text-slate-600">{reasons.map((reason) => <p key={reason}>{reason}</p>)}</div> : <p className="text-right text-sm text-emerald-700">Configuration complete. Continue will evaluate approval requirements.</p>}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
+  return <div className="w-full space-y-2 sm:w-auto"><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("dashboard", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, metadata: { saved_from_workspace: true } }))}>{pendingAction === "dashboard" ? "Saving..." : "Dashboard"}</Button><Button variant="outline" className="w-full sm:w-auto" disabled={isPending} onClick={() => run("save", () => saveQuoteDraft({ quote_id: quote.id, actor_id: actorId, currency_code: quote.currencyCode, valid_until: quote.validUntil, metadata: { saved_from_workspace: true } }))}>{pendingAction === "save" ? "Saving..." : "Save Draft"}</Button><Button className="w-full sm:w-auto" disabled={isPending || !quote.configuration.canContinue} onClick={() => run("continue", () => continueQuoteConfiguration({ quote_id: quote.id, actor_id: actorId, idempotency_key: `continue-${quote.id}` }))}>{pendingAction === "continue" ? "Continuing..." : "Continue"}</Button></div>{reasons.length > 0 ? <div className="space-y-1 text-right text-sm text-slate-600">{reasons.map((reason) => <p key={reason}>{reason}</p>)}</div> : <p className="text-right text-sm text-emerald-700">Configuration complete. Continue will evaluate approval requirements.</p>}{error ? <p className="text-right text-sm text-red-600" role="alert">{error}</p> : null}</div>;
 }

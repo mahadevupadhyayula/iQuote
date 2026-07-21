@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Save } from "lucide-react";
 
 import { completeMissingInformation } from "@/app/quotes/[quoteId]/needs-information/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DashboardButton } from "@/components/app-shell/dashboard-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,13 +63,17 @@ const existingValue = (quote: InternalQuoteWorkspaceViewModel, field: Normalized
 };
 
 export function NeedsInformationForm({ quote }: Props) {
+  const router = useRouter();
   const missingFields = collectMissingFields(quote);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const [savedIntent, setSavedIntent] = useState<"draft" | "dashboard" | null>(null);
+  useEffect(() => { if (savedIntent === "dashboard") router.push("/quotes"); }, [savedIntent, router]);
   const productIndexes = [...new Set(missingFields.filter((field) => field.path.startsWith("requested_items[")).map((field) => field.itemIndex).filter((index): index is number => index != null))]
     .filter((index) => candidatesForItem(quote, index).length > 1 || quote.lines[index]?.productId == null);
 
-  const submit = (intent: "continue" | "draft") => (formData: FormData) => {
+  const submit = (fallbackIntent: "continue" | "draft" | "dashboard") => (formData: FormData) => {
+    const intent = (formData.get("intent") === "dashboard" ? "dashboard" : fallbackIntent) as "continue" | "draft" | "dashboard";
     const fields: Record<string, string> = {};
     const clarificationAnswers: Record<string, string | number | boolean | null> = {};
     const productSelections: Record<string, { productId: string | null; sku?: string | null; description?: string | null; unresolved?: boolean }> = {};
@@ -85,12 +91,13 @@ export function NeedsInformationForm({ quote }: Props) {
       }
     }
     startTransition(async () => {
+      setSavedIntent(null);
       const result = await completeMissingInformation({ quoteId: quote.id, intent, fields, clarificationAnswers, productSelections });
-      if (!result.ok) setErrors(result.fieldErrors);
+      if (!result.ok) setErrors(result.fieldErrors); else if (intent === "dashboard") setSavedIntent("dashboard"); else if (intent === "draft") setSavedIntent("draft");
     });
   };
 
-  return <form action={submit("continue")} className="space-y-6">
+  return <form id={`needs-information-${quote.id}`} action={submit("continue")} className="space-y-6">
     {quote.reviewMetadata.manualEntry.enabled && <Alert className="border-amber-300 bg-amber-50"><AlertTriangle className="h-4 w-4 text-amber-600" /><AlertTitle>Manual-entry path enabled</AlertTitle><AlertDescription>Validated extraction may still require customer clarification. Enter only customer-provided facts; pricing, inventory, and approvals remain outside this step.</AlertDescription></Alert>}
     <Card><CardHeader><CardTitle>Information requiring attention</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
       {missingFields.map((field) => <label className="space-y-2 text-sm font-medium" key={field.path}>{field.label}{field.itemIndex != null ? ` (item ${field.itemIndex + 1})` : ""}
@@ -100,6 +107,6 @@ export function NeedsInformationForm({ quote }: Props) {
     </CardContent></Card>
     {quote.reviewMetadata.clarificationQuestions.length > 0 && <Card><CardHeader><CardTitle>Clarification questions</CardTitle></CardHeader><CardContent className="space-y-4">{quote.reviewMetadata.clarificationQuestions.map((question, index) => { const record = asRecord(question); const field = String(record.field ?? `question_${index}`); const type = answerTypeFor(record, field); const definition = getMissingFieldDefinition(field); const name = `clarification:${field}`; return <div className="block space-y-2 text-sm font-medium" key={`${field}-${index}`}><div>{String(record.question ?? definition?.label ?? "Clarification needed")}</div>{type === "boolean" ? <div className="flex gap-4"><label><input type="radio" name={name} value="true" /> Yes</label><label><input type="radio" name={name} value="false" /> No</label></div> : type === "percentage" ? <div className="flex items-center gap-2"><Input name={name} type="number" min={definition?.minimum ?? 0} max={definition?.maximum ?? 100} step={definition?.step ?? 0.1} /><span>%</span></div> : type === "number" ? <Input name={name} type="number" min={definition?.minimum} max={definition?.maximum} step={definition?.step} /> : type === "date" ? <Input name={name} type="date" /> : type === "select" ? <Select name={name}><SelectTrigger><SelectValue placeholder="Select an option" /></SelectTrigger><SelectContent>{(Array.isArray(record.options) ? record.options.map(asRecord) : []).map((option) => <SelectItem key={String(option.value)} value={String(option.value)}>{String(option.label ?? option.value)}</SelectItem>)}</SelectContent></Select> : type === "text" ? <Input name={name} type="text" /> : <Textarea name={name} />}{definition?.helpText ? <p className="text-xs text-slate-500">{definition.helpText}</p> : null}</div>; })}</CardContent></Card>}
     {productIndexes.length > 0 && <Card><CardHeader><CardTitle>Product candidate selection</CardTitle></CardHeader><CardContent className="space-y-4">{productIndexes.map((index) => <label className="block space-y-2 text-sm font-medium" key={index}>Catalog product for item {index + 1}<Select name={`product:requested_items[${index}]`}><SelectTrigger><SelectValue placeholder="Select catalog candidate or mark unresolved" /></SelectTrigger><SelectContent>{candidatesForItem(quote, index).map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.sku} — {candidate.name}</SelectItem>)}<SelectItem value="__unresolved">Mark unresolved</SelectItem></SelectContent></Select>{errors[`requested_items[${index}]`] && <span className="text-xs text-red-600">{errors[`requested_items[${index}]`]}</span>}</label>)}</CardContent></Card>}
-    <div className="flex flex-wrap gap-3"><Button className="bg-blue-600 hover:bg-blue-700" disabled={isPending} type="submit"><Save className="mr-2 h-4 w-4" />Save and Continue to Configuration</Button><Button disabled={isPending} formAction={submit("draft")} type="submit" variant="outline">Save Draft</Button></div>
+    <div className="flex flex-wrap gap-3"><DashboardButton mode="submit-form" formId={`needs-information-${quote.id}`} disabled={isPending} /><Button className="bg-blue-600 hover:bg-blue-700" disabled={isPending} type="submit"><Save className="mr-2 h-4 w-4" />Save and Continue to Configuration</Button><Button disabled={isPending} formAction={submit("draft")} type="submit" variant="outline">Save Draft</Button></div>{savedIntent === "draft" ? <p className="text-sm text-emerald-700">Draft saved.</p> : null}
   </form>;
 }

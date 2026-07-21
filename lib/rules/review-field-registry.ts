@@ -57,7 +57,7 @@ export const getReviewFieldDefinition = (path: string): NormalizedReviewField | 
 const valueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export const reviewInformationSchema = z.object({
   quoteId: z.string().uuid().or(z.string().min(1)),
-  intent: z.enum(["continue", "draft"]).default("continue"),
+  intent: z.enum(["continue", "draft", "dashboard"]).default("continue"),
   fields: z.record(z.string().transform(normalizeReviewFieldPath), valueSchema).default({}),
 });
 export type ReviewInformationInput = z.input<typeof reviewInformationSchema>;

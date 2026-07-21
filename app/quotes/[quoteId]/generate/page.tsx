@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { FileText, Send } from "lucide-react";
 import { SendQuoteForm } from "@/components/quotes/send-quote-form";
 
+import { DashboardButton } from "@/components/app-shell/dashboard-button";
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,7 @@ export default async function GenerateQuotePage({ params }: { params: Promise<{ 
   if (!["approved", "sent", "accepted"].includes(quote.status)) redirect(`/quotes/${quoteId}`);
 
   return (
-    <WorkspaceLayout currentStep="generate-quote" status={quote.status} contentClassName="space-y-6">
+    <WorkspaceLayout currentStep="generate-quote" status={quote.status} contentClassName="space-y-6" dashboardAction={<DashboardButton mode="navigate" />}>
       <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">Generate customer quote</p><h1 className="text-3xl font-bold">{quote.quoteNumber}</h1><p className="text-slate-600">Customer-ready preview for {quote.customer?.name ?? "Unknown customer"}.</p></div><Badge className="bg-white text-sm text-slate-700">{quote.status.replaceAll("_", " ")}</Badge></header>
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-blue-600" /> Customer quote preview</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><div><strong>Seller</strong><p>Intelligent Quote Workspace Demo Seller</p></div><div><strong>Customer</strong><p>{quote.customer?.legal_name ?? quote.customer?.name ?? "Unknown customer"}</p></div>{quote.lines.map((line) => <div key={line.id} className="grid grid-cols-5 gap-2 border-b pb-2"><span>{line.sku}</span><span className="col-span-2">{line.quantity} × {line.description}</span><span>{currency(line.unitPrice, quote.currencyCode)} ({percent(line.discountBps)} off)</span><strong>{currency(line.lineTotalAmount, quote.currencyCode)}</strong></div>)}<div><strong>Fulfilment summary</strong><p>Fulfilment will follow the confirmed inventory selection for each quoted product.</p></div></CardContent></Card>

@@ -77,6 +77,8 @@ const resolver: Resolver<QuoteIntakeInput> = async (values) => {
   };
 };
 
+export const intakeDraftStorageKey = "iquote:new-intake-draft:v1";
+
 const intakeChecklist = [
   "Customer identified",
   "Product or service request captured",
@@ -89,6 +91,7 @@ const intakeChecklist = [
 export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
   const router = useRouter();
   const [result, setResult] = useState<IntakeActionState | null>(null);
+  const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const form = useForm<QuoteIntakeInput>({
     resolver,
@@ -108,6 +111,36 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
     () => Math.min(100, Math.round(((requestText?.length ?? 0) / 240) * 100)),
     [requestText],
   );
+
+  useEffect(() => {
+    const rawDraft = window.sessionStorage.getItem(intakeDraftStorageKey);
+    if (!rawDraft) return;
+    try {
+      const draft = JSON.parse(rawDraft) as Partial<QuoteIntakeInput>;
+      form.reset({
+        customerName: draft.customerName ?? "",
+        customerEmail: draft.customerEmail ?? "",
+        companyDomain: draft.companyDomain ?? "",
+        opportunityName: draft.opportunityName ?? "",
+        currencyCode: draft.currencyCode ?? "USD",
+        validUntil: draft.validUntil ?? "",
+        requestText: draft.requestText ?? "",
+        attachmentName: draft.attachmentName ?? "",
+        seededScenarioId: draft.seededScenarioId,
+      });
+      setDraftMessage("Unsaved intake draft restored from this device.");
+    } catch {
+      window.sessionStorage.removeItem(intakeDraftStorageKey);
+    }
+  }, [form]);
+
+  const saveIntakeDraftAndDashboard = () => {
+    const values = form.getValues();
+    window.sessionStorage.setItem(intakeDraftStorageKey, JSON.stringify(values));
+    setDraftMessage("Intake draft saved on this device.");
+    router.push("/quotes");
+  };
+
   const slaPreview = useMemo(() => {
     const startedAt = new Date();
     const dueAt = new Date(startedAt.getTime() + 15 * 60 * 1000);
@@ -141,6 +174,7 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
 
   useEffect(() => {
     if (!result?.ok) return;
+    window.sessionStorage.removeItem(intakeDraftStorageKey);
     if (result.status === "needs_information" || result.status === "reviewing" || result.status === "configuring") {
       router.push(`/quotes/${result.quoteId}/review`);
     }
@@ -155,6 +189,7 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
     <WorkspaceGrid
       main={
         <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
+          {draftMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{draftMessage}</p> : null}
           <Card className="border-blue-100 shadow-sm">
             <CardHeader className="space-y-2">
               <div className="flex items-center gap-2">
@@ -270,7 +305,16 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
 
           {result && <ResultPanel result={result} />}
 
-          <Button
+          <div className="flex flex-wrap gap-3"><Button
+            type="button"
+            variant="outline"
+            className="w-full text-base md:w-auto"
+            disabled={isPending}
+            onClick={saveIntakeDraftAndDashboard}
+            size="lg"
+          >
+            Dashboard
+          </Button><Button
             className="w-full bg-blue-600 text-base hover:bg-blue-700 md:w-auto"
             disabled={isPending}
             size="lg"
@@ -282,7 +326,7 @@ export function QuoteIntakeForm({ recentActivity = [] }: QuoteIntakeFormProps) {
               <Sparkles className="mr-2 h-4 w-4" />
             )}
             Extract and Build Quote
-          </Button>
+          </Button></div>
         </form>
       }
       right={
