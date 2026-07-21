@@ -4,6 +4,7 @@ import { ArrowLeft, BadgePercent, CheckCircle2, Clock3 } from "lucide-react";
 
 import { ApprovalDecisionForm } from "@/components/approvals/approval-decision-form";
 import { WorkspaceGrid } from "@/components/app-shell/workspace-grid";
+import { DashboardButton } from "@/components/app-shell/dashboard-button";
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +49,7 @@ export default async function ApprovalPage({
       currentStep="review"
       status={quote.status}
       contentClassName="max-w-4xl space-y-6"
+      dashboardAction={<DashboardButton mode="navigate" />}
     >
       <Link
         href={`/quotes/${quote.id}`}

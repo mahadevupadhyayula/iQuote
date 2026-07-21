@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BadgePercent, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
 
+import { DashboardButton } from "@/components/app-shell/dashboard-button";
 import { WorkspaceLayout } from "@/components/app-shell/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +80,7 @@ export default async function ApprovalPendingPage({
       currentStep="review"
       status={quote.status}
       contentClassName="max-w-4xl space-y-6"
+      dashboardAction={<DashboardButton mode="navigate" />}
     >
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -209,7 +211,7 @@ export default async function ApprovalPendingPage({
           href="/quotes"
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
         >
-          Back to quote queue
+          Dashboard
         </Link>
       </div>
     </WorkspaceLayout>
