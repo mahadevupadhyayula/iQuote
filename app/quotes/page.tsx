@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock3, FilePlus2, FolderOpen, ListChecks } from "lucide-react";
 
+import { ResetDemoButton } from "@/components/demo/reset-demo-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,9 +41,12 @@ export default async function QuotesPage() {
             <h1 className="text-4xl font-bold tracking-tight">Recent quotes</h1>
             <p className="max-w-3xl text-slate-600">Open an active quote workspace or create a new quote from a customer request.</p>
           </div>
-          <Link href="/quotes/new" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-            <FilePlus2 className="h-4 w-4" /> Create quote
-          </Link>
+          <div className="flex flex-wrap items-start gap-3">
+            {process.env.ENABLE_DEMO_ACTIVITY_RESET === "true" ? <ResetDemoButton /> : null}
+            <Link href="/quotes/new" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+              <FilePlus2 className="h-4 w-4" /> Create quote
+            </Link>
+          </div>
         </header>
 
         <Card>
